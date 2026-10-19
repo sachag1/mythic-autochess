@@ -7,6 +7,7 @@ import { BOARD_COLS, BOARD_ROWS, HALF_ROWS, hexKey } from "@autochess/sim";
 import { BENCH_SIZE, BENCH_Z, benchToWorld, hexToWorld, HEX_SIZE } from "./layout";
 import { positionLocal, positionWorld, sin, texture, time, uniform, vec2, vec3, type Node } from "./tsl";
 import type { QualitySettings } from "./quality";
+import { assets } from "./assets";
 import type { VfxSystem } from "./vfx/VfxSystem";
 
 const BASE = `${import.meta.env.BASE_URL}assets/`;
@@ -136,6 +137,7 @@ export class Arena {
     this.buildGrounds();
     this.buildColumns();
     this.buildBraziers();
+    void assets.load("decor.glb").then((gltf) => this.placeDecor(gltf.scene)).catch(() => undefined);
 
     this.benchMaterial = this.benchSlots[0]!.material as THREE.MeshStandardMaterial;
     this.benchHighlightMaterial = this.benchMaterial.clone();
@@ -205,35 +207,54 @@ export class Arena {
       this.root.add(mesh);
     }
 
-    // Socle : dalle de grès sous le plateau, avec des joints dorés entre les cases.
-    const plinth = new THREE.Mesh(new THREE.BoxGeometry(15.6, 0.7, 14.2), pbrMaterial("sandstone", 3, { tint: "#efe2c8" }));
-    plinth.position.set(0, -0.55, 0);
-    plinth.receiveShadow = true;
-    plinth.castShadow = true;
-    fixUv2(plinth.geometry);
-    this.root.add(plinth);
-    const inlay = new THREE.Mesh(new THREE.BoxGeometry(14.4, 0.06, 13), new THREE.MeshStandardMaterial({ color: "#b8893a", metalness: 1, roughness: 0.35 }));
+    // Cadre du plateau : granit sombre serti d'un filet d'or, enchâssé dans l'estrade.
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(15.2, 0.5, 13.6), pbrMaterial("granite", 3, { tint: "#6a665f" }));
+    frame.position.set(0, -0.42, 0);
+    frame.receiveShadow = true;
+    frame.castShadow = true;
+    fixUv2(frame.geometry);
+    this.root.add(frame);
+    const gold = new THREE.MeshStandardMaterial({ color: "#c8973f", metalness: 1, roughness: 0.3 });
+    const inlay = new THREE.Mesh(new THREE.BoxGeometry(14.4, 0.06, 12.8), gold);
     inlay.position.y = -0.2;
     inlay.receiveShadow = true;
     this.root.add(inlay);
+    for (const [w, d, x, z] of [[15.4, 0.12, 0, 6.86], [15.4, 0.12, 0, -6.86], [0.12, 13.8, 7.66, 0], [0.12, 13.8, -7.66, 0]] as const) {
+      const rim = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, d), gold);
+      rim.position.set(x, -0.15, z);
+      this.root.add(rim);
+    }
     // Ligne de séparation des deux moitiés : filet d'or.
     const line = new THREE.Mesh(new THREE.BoxGeometry(13.6, 0.04, 0.08), new THREE.MeshStandardMaterial({ color: "#e8c46a", metalness: 1, roughness: 0.25, emissive: "#6a4a10", emissiveIntensity: 0.4 }));
     line.position.set(0, 0.09, 0);
     this.root.add(line);
-    // Marches tout autour du socle.
-    const stepMat = pbrMaterial("sandstone", 4, { tint: "#e3d4b4" });
-    for (let s = 0; s < 3; s++) {
-      const step = new THREE.Mesh(new THREE.BoxGeometry(16.6 + s * 1.4, 0.3, 15.2 + s * 1.4), stepMat);
-      step.position.y = -0.95 - s * 0.3;
-      step.receiveShadow = true;
-      fixUv2(step.geometry);
-      this.root.add(step);
-    }
+
+    // Estrade octogonale de grès (plateau et banc) et ses marches, comme un temple.
+    const daisMat = pbrMaterial("sandstone", 5, { tint: "#ece0c6" });
+    const octagon = (radius: number, height: number, y: number, mat: THREE.Material) => {
+      const g = new THREE.CylinderGeometry(radius, radius + 0.08, height, 8, 1);
+      g.rotateY(Math.PI / 8);
+      fixUv2(g);
+      const m = new THREE.Mesh(g, mat);
+      m.position.set(0, y, 1.3);
+      m.receiveShadow = true;
+      m.castShadow = true;
+      this.root.add(m);
+      return m;
+    };
+    octagon(12.2, 0.9, -0.7, daisMat);
+    const stepMat = pbrMaterial("sandstone", 6, { tint: "#e0d2b2" });
+    for (let i = 0; i < 3; i++) octagon(12.9 + i * 0.75, 0.32, -1.04 - i * 0.3, stepMat);
+    // Frise dorée au bord de l'estrade.
+    const frieze = new THREE.Mesh(new THREE.TorusGeometry(12.15, 0.05, 6, 8), gold);
+    frieze.rotation.set(Math.PI / 2, 0, Math.PI / 8);
+    frieze.position.set(0, -0.26, 1.3);
+    this.root.add(frieze);
   }
 
   private buildBench(): void {
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(15.6, 0.5, 2.2), pbrMaterial("sandstone", 2, { tint: "#e8dcc2" }));
-    slab.position.set(0, -0.45, BENCH_Z);
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(15.6, 0.3, 2.2), pbrMaterial("granite", 2, { tint: "#6a665f" }));
+    slab.position.set(0, -0.32, BENCH_Z);
     slab.receiveShadow = true;
     slab.castShadow = true;
     fixUv2(slab.geometry);
@@ -332,22 +353,56 @@ export class Arena {
     this.root.add(banner);
   }
 
+  /** Décor réaliste Poly Haven : rochers dans le sable, statues et vases autour de l'estrade. */
+  private placeDecor(decor: THREE.Object3D): void {
+    const place = (name: string, x: number, z: number, scale: number, rotY = 0, y = -1.9) => {
+      const src = decor.children.find((c) => c.name === name);
+      if (!src) return;
+      const o = src.clone(true);
+      o.position.set(x, y, z);
+      o.scale.setScalar(scale);
+      o.rotation.y = rotY;
+      o.traverse((m) => {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+      this.root.add(o);
+    };
+    const n = this.quality.scenery;
+    // Statues de part et d'autre, derrière le plateau.
+    place("gothic_statue", -14.5, -7, 1.6, 0.5, -1.85);
+    place("gothic_statue", 14.5, -7, 1.6, -0.5, -1.85);
+    place("horse_statue_01", 0, -24, 3.2, 0, -1.9);
+    // Vases près des braseros.
+    place("antique_ceramic_vase_01", -10.4, -7.4, 1.1, 0.3, -1.85);
+    place("ceramic_vase_02", 10.6, -7.6, 1.1, 1.2, -1.85);
+    place("brass_vase_01", -10.8, 6.2, 1, 0.7, -1.85);
+    // Rochers dans le sable, au-delà du dallage.
+    const rocks = ["boulder_01", "namaqualand_boulder_02", "namaqualand_boulder_04", "rock_moss_set_01"];
+    const count = Math.round(16 * n);
+    for (let i = 0; i < count; i++) {
+      const a = -Math.PI * 1.05 + (i / count) * Math.PI * 1.1 + Math.sin(i * 7.3) * 0.08;
+      const r = 33 + Math.abs(Math.sin(i * 3.1)) * 12;
+      place(rocks[i % rocks.length]!, Math.cos(a) * r * 1.2, Math.sin(a) * r - 4, 2.2 + Math.abs(Math.sin(i * 5.7)) * 2.5, i * 1.3, -2.2);
+    }
+  }
+
   private buildBraziers(): void {
     const bronze = new THREE.MeshStandardMaterial({ color: "#8a5a2a", metalness: 1, roughness: 0.35 });
     const stone = pbrMaterial("sandstone", 1, { tint: "#e0d2b2" });
     const bowl = new THREE.SphereGeometry(0.55, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
     const pedestal = new THREE.CylinderGeometry(0.3, 0.45, 1.4, 16);
-    for (const [x, z] of [[-8.6, -6.6], [8.6, -6.6], [-9.2, 4.8], [9.2, 4.8]] as const) {
+    for (const [x, z] of [[-9.4, -6.4], [9.4, -6.4], [-9.6, 6.8], [9.6, 6.8]] as const) {
       const g = new THREE.Group();
       const p = new THREE.Mesh(pedestal, stone);
       p.position.y = 0.7;
       const b = new THREE.Mesh(bowl, bronze);
       b.position.y = 1.55;
       g.add(p, b);
-      g.position.set(x, -1.85, z);
+      g.position.set(x, -0.25, z);
       g.traverse((o) => (o.castShadow = true));
       this.root.add(g);
-      const fire = new THREE.Vector3(x, -1.85 + 1.65, z);
+      const fire = new THREE.Vector3(x, -0.25 + 1.65, z);
       let light: THREE.PointLight | null = null;
       if (this.fires.length < 2) {
         light = new THREE.PointLight("#ff8a3a", 6, 9, 1.8);

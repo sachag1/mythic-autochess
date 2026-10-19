@@ -57,6 +57,7 @@ export function Gallery() {
       controls.target.set(0, 0.8, -((rows - 1) * spacing) / 2 + 1);
     }
     controls.update();
+    controls.update();
 
     const vfx = new VfxSystem(QUALITY_PRESETS.high);
     scene.add(vfx.root);

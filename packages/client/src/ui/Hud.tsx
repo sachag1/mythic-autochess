@@ -1,8 +1,9 @@
 import { countTraits, type UnitDef } from "@autochess/sim";
-import { augmentDef, COST_COLORS, omenDef, sellValue, traitDef, unitDef } from "../data/content";
+import { useState } from "react";
+import { augmentDef, COST_COLORS, omenDef, sellValue, traitDef, unitColor, unitDef } from "../data/content";
 import { actions, useStore } from "../net/store";
 import type { GameSnap, PlayerSnap, UnitSnap } from "../net/types";
-import { ItemChip, Stars, Timer, TraitTag, UnitPortrait } from "./common";
+import { ItemChip, portraitUrl, Stars, Timer, TraitTag, UnitPortrait } from "./common";
 import { PHASE_LABELS, roundKindLabel } from "./text";
 
 // ---------------------------------------------------------------- barre du haut
@@ -200,23 +201,27 @@ export function ShopBar({ game, me, dragging }: { game: GameSnap; me: PlayerSnap
 
 function ShopCard({ defId, copies, affordable, onBuy }: { defId: string; copies: number; affordable: boolean; onBuy: () => void }) {
   const def = unitDef(defId);
+  const [bought, setBought] = useState(false);
   if (!def) return <div className="shop-card empty" />;
+  const color = COST_COLORS[def.cost];
   return (
     <button
-      className={`shop-card ${affordable ? "" : "poor"} ${copies >= 2 ? "upgrade" : copies === 1 ? "owned" : ""}`}
-      style={{ borderColor: COST_COLORS[def.cost] }}
-      onClick={onBuy}
+      className={`shop-card cost-${def.cost} ${affordable ? "" : "poor"} ${copies >= 2 ? "upgrade" : copies === 1 ? "owned" : ""} ${bought ? "bought" : ""}`}
+      style={{ "--cost": color, "--pantheon": unitColor(def) } as React.CSSProperties}
+      onClick={() => {
+        if (affordable) setBought(true);
+        onBuy();
+      }}
+      onAnimationEnd={() => setBought(false)}
       title={`${def.ability.name} — ${def.ability.description}`}
     >
-      <div className="card-top">
-        <UnitPortrait defId={defId} size={38} />
-        <div className="card-traits">
-          {def.traits.map((t) => (
-            <TraitTag key={t} id={t} />
-          ))}
-        </div>
+      <img className="card-art" src={portraitUrl(defId)} alt="" draggable={false} onError={(e) => (e.currentTarget.style.display = "none")} />
+      <div className="card-traits">
+        {def.traits.map((t) => (
+          <TraitTag key={t} id={t} />
+        ))}
       </div>
-      <div className="card-bottom" style={{ background: `linear-gradient(90deg, ${COST_COLORS[def.cost]}55, transparent)` }}>
+      <div className="card-bottom">
         <span className="card-name">{def.name}</span>
         <span className="card-cost">
           <span className="coin small" /> {def.cost}

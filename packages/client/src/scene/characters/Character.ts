@@ -4,6 +4,7 @@
 // à fondus (AnimationMixer) pilotée par le replay du combat.
 import * as THREE from "three/webgpu";
 import * as SkeletonUtils from "three/addons/utils/SkeletonUtils.js";
+import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import { originOf, PANTHEON_COLORS, unitDef, itemStyle } from "../../data/content";
 import { assets, namedNode } from "../assets";
 import { abs, dot, mix, mx_noise_float, normalView, oneMinus, positionLocal, positionViewDirection, pow, smoothstep, step, texture, uniform, uv, vec3, type Node } from "../tsl";
@@ -11,6 +12,7 @@ import type { VfxSystem } from "../vfx/VfxSystem";
 import { boneFor, buildAccessory } from "./accessories";
 import { isHumanoid, specFor, type AttackStyle, type AuraKind, type BodyId, type CharSpec } from "./catalog";
 import { recolorAtlas } from "./recolor";
+import { realProp } from "./realProps";
 import { MIXAMO_ATTACKS, MIXAMO_CHARACTERS, MIXAMO_LOGICAL, mixamoAvailable, type MixamoSpec } from "./mixamo";
 
 export type Team = "ally" | "enemy";
@@ -177,6 +179,7 @@ export class Character {
         model.rotation.y = -t * 0.45;
         model.scale.setScalar(0.62 + 0.3 * (1 - Math.abs(t)));
       }
+      if (!isHumanoid(spec.body)) smoothCreature(model);
       this.dress(model, props.scene);
       holder.add(model);
       const mixer = new THREE.AnimationMixer(model);
@@ -192,7 +195,13 @@ export class Character {
 
   /** Corps Mixamo : taille normalisée, os renommés, animations recalées, accessoires. */
   private async loadMixamo(mx: MixamoSpec): Promise<void> {
-    const [body, anims, props] = await Promise.all([assets.load(`mixamo/${mx.body}.glb`), assets.load("mixamo/animations.glb"), assets.load("props.glb")]);
+    const [body, anims, props, mxWeapons, phWeapons] = await Promise.all([
+      assets.load(`mixamo/${mx.body}.glb`),
+      assets.load("mixamo/animations.glb"),
+      assets.load("props.glb"),
+      assets.load("mixamo/weapons.glb").catch(() => undefined),
+      assets.load("weapons.glb").catch(() => undefined),
+    ]);
     if (this.disposed) return;
     this.mixamo = mx;
     const model = SkeletonUtils.clone(body.scene);
@@ -235,6 +244,18 @@ export class Character {
       bone.add(obj);
     };
     for (const p of mx.props ?? []) {
+      // Arme réaliste si elle existe (épée, bouclier, arc Mixamo ; armes Poly Haven ; lance…).
+      const real = realProp(p.id, p.hand, mxWeapons, phWeapons);
+      if (real) {
+        real.object.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          m.castShadow = true;
+          this.setMaterial(m, { tint: p.tint, glow: p.glow, realistic: true });
+        });
+        attach(real.bone, real.object, 1);
+        continue;
+      }
       const src = namedNode(props, p.id);
       if (!src) continue;
       const prop = src.clone(true);
@@ -627,6 +648,30 @@ export class Character {
     }
   }
 
+  /** Portrait : masque le socle, l'anneau d'étoiles et les gemmes d'objets. */
+  setPortraitMode(): void {
+    this.fx.rimStrength = 0;
+    this.base.visible = false;
+    this.pantheonDisc.visible = false;
+    if (this.starRing) this.starRing.visible = false;
+    this.gems.visible = false;
+  }
+
+  /** Corps humanoïde (KayKit ou Mixamo), par opposition aux créatures. */
+  get humanoid(): boolean {
+    return this.mixamo !== null || isHumanoid(this.spec.body);
+  }
+
+  /** Boîte englobante du corps seul (maillages animés, sans armes ni accessoires). */
+  bodyBox(): THREE.Box3 {
+    const box = new THREE.Box3();
+    this.root.updateMatrixWorld(true);
+    this.root.traverse((o) => {
+      if ((o as THREE.SkinnedMesh).isSkinnedMesh && o.visible) box.expandByObject(o, true);
+    });
+    return box;
+  }
+
   /** Point d'impact (poitrine) en coordonnées monde. */
   chest(): THREE.Vector3 {
     return new THREE.Vector3(this.root.position.x, this.root.position.y + this.figure.position.y + this.height * 0.55, this.root.position.z);
@@ -712,7 +757,10 @@ function effectMaterial(src: THREE.Material, o: MaterialOptions): THREE.Material
   let emissive: Node = U.rim.mul(fresnel).mul(U.rimStrength).add(vec3(1, 1, 1).mul(U.flash));
   const srcEmissive = s.emissive && s.emissiveIntensity ? s.emissive.clone().multiplyScalar(s.emissiveIntensity) : null;
   if (s.name === "Glow" && o.eyes) emissive = emissive.add(vec3(uniform(new THREE.Color(o.eyes).multiplyScalar(3))));
-  else if (srcEmissive && srcEmissive.r + srcEmissive.g + srcEmissive.b > 0.01) emissive = emissive.add(vec3(uniform(srcEmissive)));
+  else if (srcEmissive && srcEmissive.r + srcEmissive.g + srcEmissive.b > 0.01) {
+    // Avec une carte d'émission (yeux, runes lumineuses), seule la carte éclaire.
+    emissive = emissive.add(s.emissiveMap ? texture(s.emissiveMap).rgb.mul(vec3(uniform(srcEmissive))) : vec3(uniform(srcEmissive)));
+  }
   if (o.glow) emissive = emissive.add(vec3(uniform(new THREE.Color(o.glow).multiplyScalar(1.2))));
   // Parties transparentes (cils, cheveux, voiles) : on garde l'alpha de la texture.
   const cutout = map && (s.transparent || s.alphaTest > 0);
@@ -736,6 +784,37 @@ function effectMaterial(src: THREE.Material, o: MaterialOptions): THREE.Material
   }
   effectMaterials.set(key, out);
   return out;
+}
+
+// ---------------------------------------------------------------- créatures
+
+const smoothed = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+
+/**
+ * Les créatures Quaternius sont en facettes (normales par face) : on fusionne les sommets
+ * et on recalcule des normales lissées pour un rendu plus naturel sous l'éclairage HDRI.
+ */
+function smoothCreature(model: THREE.Object3D): void {
+  model.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    let g = smoothed.get(m.geometry);
+    if (!g) {
+      // Les attributs décodés par meshopt sont entrelacés : on les sépare d'abord.
+      const src = new THREE.BufferGeometry();
+      for (const [name, attr] of Object.entries(m.geometry.attributes)) {
+        if (name === "normal") continue;
+        const a = attr as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+        src.setAttribute(name, (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute ? (a as THREE.InterleavedBufferAttribute).clone() : a.clone());
+      }
+      if (m.geometry.index) src.setIndex(m.geometry.index.clone());
+      for (const g of m.geometry.groups) src.addGroup(g.start, g.count, g.materialIndex);
+      g = mergeVertices(src, 1e-4);
+      g.computeVertexNormals();
+      smoothed.set(m.geometry, g);
+    }
+    m.geometry = g;
+  });
 }
 
 // ---------------------------------------------------------------- animations Mixamo

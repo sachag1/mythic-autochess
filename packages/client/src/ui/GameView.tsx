@@ -22,6 +22,8 @@ export function GameView() {
   const [backend, setBackend] = useState("");
   const [loading, setLoading] = useState<{ progress: number; done: boolean }>({ progress: 0, done: false });
   const [perf, setPerf] = useState("");
+  const [levelUp, setLevelUp] = useState<number | null>(null);
+  const lastLevel = useRef<number | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<BoardScene | null>(null);
 
@@ -51,6 +53,13 @@ export function GameView() {
   useEffect(() => {
     sceneRef.current?.setPlanning({ player: viewed, own, canEditBoard, canEditBench });
   }, [viewed, own, canEditBoard, canEditBench]);
+
+  // Montée de niveau : bannière dorée.
+  const myLevel = me?.level ?? null;
+  useEffect(() => {
+    if (myLevel !== null && lastLevel.current !== null && myLevel > lastLevel.current) setLevelUp(myLevel);
+    lastLevel.current = myLevel;
+  }, [myLevel]);
 
   // Bannières de l'arène aux couleurs du panthéon favori (présage « Faveur du Panthéon »).
   const theme = game.omen === "favored_pantheon" ? game.omenDetail : null;
@@ -140,6 +149,11 @@ export function GameView() {
       {itemDrag && (
         <div className="item-ghost" style={{ left: itemDrag.x, top: itemDrag.y }}>
           <ItemChip id={itemDrag.id} size={36} title={false} />
+        </div>
+      )}
+      {levelUp !== null && (
+        <div key={levelUp} className="level-up" onAnimationEnd={() => setLevelUp(null)}>
+          Niveau {levelUp}
         </div>
       )}
       <Toasts />

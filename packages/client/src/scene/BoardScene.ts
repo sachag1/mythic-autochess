@@ -81,7 +81,7 @@ export class BoardScene {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(36, 1, 0.1, 400);
   private readonly cameraBase = new THREE.Vector3();
-  private readonly lookAt = new THREE.Vector3(0, 0, 1.4);
+  private readonly lookAt = new THREE.Vector3(0, 0, 2.4);
   private readonly raycaster = new THREE.Raycaster();
   private readonly ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private readonly overlay: HTMLDivElement;
@@ -224,10 +224,10 @@ export class BoardScene {
     this.camera.aspect = aspect;
     // Caméra inclinée façon TFT ; on recule sur les écrans étroits pour garder le plateau entier.
     const back = Math.max(1, 1.6 / aspect);
-    this.cameraBase.set(0, 19.5 * back, 17.5 * back);
+    this.cameraBase.set(0, 22.5 * back, 21 * back);
     this.camera.position.copy(this.cameraBase);
     this.camera.lookAt(this.lookAt);
-    this.camera.setViewOffset(this.width, this.height, this.width > 900 ? 40 : 0, this.height * 0.09, this.width, this.height);
+    this.camera.setViewOffset(this.width, this.height, this.width > 900 ? 40 : 0, this.height * 0.07, this.width, this.height);
     this.camera.updateProjectionMatrix();
   }
 

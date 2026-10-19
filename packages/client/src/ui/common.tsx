@@ -37,18 +37,24 @@ export function TraitTag({ id }: { id: string }) {
   );
 }
 
+/** Portrait rendu depuis le modèle 3D (public/assets/portraits), sur un fond aux couleurs du panthéon. */
+export function portraitUrl(defId: string): string {
+  return `${import.meta.env.BASE_URL}assets/portraits/${defId}.webp`;
+}
+
 export function UnitPortrait({ defId, size = 40 }: { defId: string; size?: number }) {
   const def = unitDef(defId);
+  const [broken, setBroken] = useState(false);
   const style: CSSProperties = {
     width: size,
     height: size,
-    background: `radial-gradient(circle at 35% 30%, #ffffff55, transparent 60%), ${unitColor(def)}`,
+    background: `radial-gradient(circle at 50% 35%, ${unitColor(def)}cc, #0e1018 75%)`,
     borderColor: COST_COLORS[def?.cost ?? 1],
     fontSize: size * 0.4,
   };
   return (
     <span className="unit-portrait" style={style}>
-      {(def?.name ?? defId).slice(0, 1)}
+      {broken ? (def?.name ?? defId).slice(0, 1) : <img src={portraitUrl(defId)} alt="" draggable={false} onError={() => setBroken(true)} />}
     </span>
   );
 }
