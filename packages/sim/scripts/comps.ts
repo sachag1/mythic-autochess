@@ -3,11 +3,13 @@
 // protégé, objets répartis), les fait s'affronter et mesure :
 // - le taux de victoire de chaque archétype (reroll, niveau 8 classique, gros persos) ;
 // - le taux de victoire de chaque unité quand elle est sur le plateau ;
-// - le taux de victoire de chaque palier de synergie actif, dans des compos mixtes.
-// Objectif : tous les archétypes autour de 50 %, aucune unité ni synergie piège.
+// - le taux de victoire de chaque palier de synergie actif, dans des compos mixtes ;
+// - le taux de victoire des équipes qui portent chaque objet complet.
+// Objectif : tous les archétypes autour de 50 %, aucune unité, synergie ni objet piège.
 import {
   activeTraits,
   createContent,
+  ITEMS,
   Rng,
   runBattle,
   TRAITS,
@@ -21,8 +23,12 @@ const TEAMS_PER_ARCHETYPE = Number(process.env.TEAMS ?? 120);
 const GAMES_PER_TEAM = Number(process.env.GAMES ?? 24);
 const UNIT_LOW = 0.42;
 const UNIT_HIGH = 0.58;
+const ITEM_LOW = 0.42;
+const ITEM_HIGH = 0.58;
 const content = createContent();
 const rng = new Rng(7);
+/** Tirage des composants à part : les équipes restent les mêmes quand on change les objets. */
+const itemRng = new Rng(11);
 
 // ---------------------------------------------------------------- archétypes
 
@@ -75,6 +81,8 @@ interface Team {
   units: { def: UnitDef; star: StarLevel }[];
   board: Placement[];
   traits: string[];
+  /** Objets complets portés par l'équipe (sans doublon). */
+  items: string[];
 }
 
 function buildTeam(archetype: string, slots: readonly Slot[]): Team {
@@ -109,7 +117,8 @@ function buildTeam(archetype: string, slots: readonly Slot[]): Team {
 
   const board = placeTeam(chosen);
   const traits = activeTraits(chosen.map((c) => c.def), content.traits).map((a) => `${a.trait.name} ${a.breakpoint.count}`);
-  return { archetype, units: chosen, board, traits };
+  const items = [...new Set(board.flatMap((p) => p.items ?? []).filter((id) => content.items.get(id)!.components))];
+  return { archetype, units: chosen, board, traits, items };
 }
 
 /** Front en rangée 3 (tanks au centre), le reste derrière, le carry dans un coin. */
@@ -136,16 +145,74 @@ function placeTeam(units: { def: UnitDef; star: StarLevel }[]): Placement[] {
   return placements;
 }
 
-/** Même nombre d'objets pour tout le monde : 3 sur le carry, 2 sur le tank principal. */
+// ---------------------------------------------------------------- objets
+
+/** Même nombre de composants pour tout le monde, tirés au hasard comme le butin PvE. */
+const COMPONENTS_PER_TEAM = 10;
+const MAX_ITEMS_PER_UNIT = 3;
+const COMPONENT_IDS = ITEMS.filter((i) => !i.components).map((i) => i.id);
+
+/** Recettes qu'un joueur construit selon le porteur. Un objet peut convenir à plusieurs rôles. */
+const ITEM_POOLS = {
+  physical: [
+    "kusanagi", "gungnir", "excalibur", "ruyi_jingu_bang", "spear_of_lugh", "gae_bulg", "fenghuo_lun",
+    "bow_of_hou_yi", "harpe", "draupnir", "talaria", "eye_of_ra", "smoking_mirror", "sharur",
+  ],
+  magic: [
+    "book_of_thoth", "ambrosia", "mjolnir", "trident", "xiuhcoatl", "smoking_mirror", "cauldron_of_dagda",
+    "ruyi_jingu_bang", "draupnir", "talaria",
+  ],
+  tank: [
+    "aegis", "golden_fleece", "nemean_hide", "svalinn", "chimalli", "wedjat", "tamatebako", "imhullu", "melammu",
+    "tablet_of_destinies", "ankh", "yata_no_kagami", "megingjord", "tyrfing", "plant_of_heartbeat", "lotus_lantern",
+  ],
+} as const;
+
+for (const id of Object.values(ITEM_POOLS).flat()) {
+  if (!content.items.get(id)?.components) throw new Error(`Unknown completed item "${id}" in ITEM_POOLS`);
+}
+for (const item of ITEMS) {
+  const pooled = Object.values(ITEM_POOLS).some((pool) => (pool as readonly string[]).includes(item.id));
+  if (item.components && !pooled) throw new Error(`Item "${item.id}" is in no ITEM_POOLS entry`);
+}
+
+/**
+ * Comme un joueur : 10 composants au hasard, combinés en recettes adaptées au carry
+ * (physique ou magique) et au tank principal, à tour de rôle (carry d'abord). Les
+ * composants restants sont posés tels quels sur les places libres.
+ */
 function giveItems(placements: Placement[]): void {
   const defs = placements.map((p) => content.units.get(p.defId)!);
   const carryIndex = argmax(defs, (d, i) => (isTank(d) ? -10 : 0) + d.cost * 2 + placements[i]!.star * 3);
   const tankIndex = argmax(defs, (d, i) => (i === carryIndex ? -100 : 0) + (isTank(d) ? 10 : 0) + (isFrontline(d) ? 5 : 0) + d.cost);
 
-  const carry = defs[carryIndex]!;
-  const carryItems = usesAbilityPower(carry) ? ["ambrosia", "mjolnir", "rod"] : ["gungnir", "excalibur", "sword"];
-  placements[carryIndex] = { ...placements[carryIndex]!, items: carryItems };
-  placements[tankIndex] = { ...placements[tankIndex]!, items: ["aegis", "golden_fleece"] };
+  const bag = Array.from({ length: COMPONENTS_PER_TEAM }, () => COMPONENT_IDS[itemRng.int(COMPONENT_IDS.length)]!);
+  const holders = [
+    { index: carryIndex, pool: usesAbilityPower(defs[carryIndex]!) ? ITEM_POOLS.magic : ITEM_POOLS.physical, items: [] as string[] },
+    { index: tankIndex, pool: ITEM_POOLS.tank, items: [] as string[] },
+  ];
+  for (const holder of [holders[0]!, holders[1]!, holders[0]!, holders[1]!, holders[0]!]) {
+    const feasible = holder.pool.filter((id) => !holder.items.includes(id) && takeComponents(bag, id, true));
+    if (!feasible.length) continue;
+    const id = feasible[itemRng.int(feasible.length)]!;
+    takeComponents(bag, id, false);
+    holder.items.push(id);
+  }
+  for (const holder of holders) {
+    while (holder.items.length < MAX_ITEMS_PER_UNIT && bag.length) holder.items.push(bag.pop()!);
+    placements[holder.index] = { ...placements[holder.index]!, items: holder.items };
+  }
+}
+
+/** Retire du sac les deux composants de la recette (ou vérifie seulement qu'ils y sont). */
+function takeComponents(bag: string[], itemId: string, dryRun: boolean): boolean {
+  const [a, b] = content.items.get(itemId)!.components!;
+  const i = bag.indexOf(a);
+  if (i < 0) return false;
+  const j = bag.findIndex((c, k) => c === b && k !== i);
+  if (j < 0) return false;
+  if (!dryRun) for (const k of [i, j].sort((x, y) => y - x)) bag.splice(k, 1);
+  return true;
 }
 
 function argmax<T>(xs: T[], score: (x: T, i: number) => number): number {
@@ -212,3 +279,7 @@ const missing = UNITS.filter((u) => !teams.some((t) => t.units.some((x) => x.def
 if (missing.length) console.log(`\n  Never picked: ${missing.map((u) => u.name).join(", ")}`);
 report("Active traits", groupBy((t) => t.traits), 15, [0.4, 0.6]);
 report("Number of active traits", groupBy((t) => [`${t.traits.length} traits`]), 10);
+report("Items (win rate of teams that build them)", groupBy((t) => t.items.map((id) => content.items.get(id)!.name)), 15, [ITEM_LOW, ITEM_HIGH]);
+const unbuilt = ITEMS.filter((i) => i.components && !teams.some((t) => t.items.includes(i.id)));
+if (unbuilt.length) console.log(`
+  Never built: ${unbuilt.map((i) => i.name).join(", ")}`);

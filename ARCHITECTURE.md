@@ -52,7 +52,7 @@ Code pur, sans réseau ni rendu. Testable en isolation.
 | `data/balance.ts` | Gabarits de stats par **rôle** et par **coût** (rareté 1 à 5) |
 | `data/units.ts` | Les 56 personnages (7 par panthéon, 12 / 12 / 12 / 12 / 8 par coût) |
 | `data/traits.ts` | 8 origines (panthéons) + 7 classes, paliers à 2 / 4 / 6 |
-| `data/items.ts` | 8 composants + objets complets (artefacts mythiques) |
+| `data/items.ts` | 8 composants + 36 objets complets (artefacts mythiques, une recette par paire) |
 | `data/shop.ts` | Taille du pool et probabilités de la boutique par niveau (pour le serveur) |
 | `scripts/demo.ts` | Combat d'exemple commenté : `npm run demo` |
 | `scripts/balance.ts` | Équilibrage unité par unité et synergie par synergie : `npm run balance` |
@@ -79,6 +79,15 @@ rangées 4–7.
 - Les sorts sont composés d'**effets primitifs** (dégâts, soin, bouclier, étourdissement,
   bonus de stat, mana, saut) avec une **zone** (cible, rayon autour de la cible, soi…).
   On crée un nouveau sort en données, sans écrire de code.
+- Effets supplémentaires (surtout pour les objets) : **brûlure** (% des PV max en dégâts
+  bruts chaque seconde, sans cumul), **blessure** (soins reçus réduits), **réduction
+  d'armure / de résistance magique** (en %, la plus forte s'applique), **immunité** aux
+  étourdissements. Mise à l'échelle possible sur les PV max (`scaling: "maxHp"`).
+- Déclencheurs : début de combat, toutes les N attaques, après un sort, mort d'un allié,
+  intervalle, **coup critique**, **achèvement**, **dégâts reçus** (avec recharge) et
+  **PV sous un seuil** (une fois) ; `limit` plafonne le nombre de déclenchements.
+- Nouveaux événements pour le client : `burn`, `wound`, `sunder`, `immunity` (les dégâts
+  de brûlure arrivent en événements `damage` de type `true`, sans mana ni vol de vie).
 - Les **assassins** sautent à côté de l'ennemi le plus éloigné au début du combat, comme
   dans TFT : le placement de la ligne arrière compte.
 
@@ -202,17 +211,22 @@ plutôt que sur la chance.
    - chaque synergie à 2 / 4 / 6 contre les mêmes unités sans synergie (écart de PV).
 3. `npm run comps` — **la référence** : des centaines d'équipes construites comme par un
    joueur (noyau de synergies, ligne de front, carry protégé, mêmes objets pour tous)
-   s'affrontent. Cibles :
+   s'affrontent. Objets : chaque équipe tire 10 composants au hasard et les combine en
+   recettes adaptées à son carry (physique ou magique) et à son tank (3 + 2 objets).
+   Cibles :
    - archétypes (reroll 1 / 2 / 3 pièces, niveau 8 classique, gros persos) : ~50 % ;
    - chaque unité : entre 42 et 58 % de victoires quand elle est jouée ;
    - chaque palier de synergie : entre 40 et 60 % ;
-   - compos mono-synergie et compos mixtes : même taux de victoire.
+   - compos mono-synergie et compos mixtes : même taux de victoire ;
+   - chaque objet complet : entre 42 et 58 % de victoires pour les équipes qui le portent.
 4. On corrige d'abord le gabarit si tout un rôle est décalé, puis les sorts un par un.
 
-État au 19 oct. 2026 (tournoi de 1 500 équipes, `TEAMS=300 GAMES=30 npm run comps`) :
-archétypes entre 43 et 57 %, 55 unités sur 56 dans la cible (Ra à 59 %), tous les paliers
-de synergie dans la cible sauf Oracle 6 (64 %, peu joué), compos de 3 à 7 synergies
-actives entre 46 et 54 %.
+État au 19 oct. 2026 avec les 36 objets (tournoi de 1 500 équipes,
+`TEAMS=300 GAMES=30 npm run comps`, moyenne de 6 tirages d'objets) : archétypes entre 44
+et 55 %, 55 unités sur 56 dans la cible (Ra à 59–60 %), tous les paliers de synergie dans
+la cible sauf Oracle 6 (65 %, peu joué), **36 objets entre 47 et 56 %**. Ajustements
+faits avec les objets : Kami 6 (mana par attaque 12 → 9), Ziggurat 6 (65 → 58),
+Gilgamesh (solidité de son sort 35 → 30) et Marduk (bouclier 160 → 140).
 
 ## Équité : limiter la frustration liée à la chance
 
@@ -229,5 +243,4 @@ En place dans le serveur :
 - **Appariement** : on évite de rejouer contre ses derniers adversaires.
 - **Pas de personnage piège** : `npm run comps` avant chaque modification du contenu.
 
-À faire : boutique toujours privée côté rendu (déjà privée côté réseau), et plus de
-recettes d'objets (6 objets complets sur les 36 combinaisons possibles pour l'instant).
+À faire : boutique toujours privée côté rendu (déjà privée côté réseau).
