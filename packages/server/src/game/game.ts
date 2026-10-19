@@ -12,10 +12,12 @@ import {
   runBattle,
   type BattleEvent,
   type Content,
+  type Modifier,
   type Placement,
   type StarLevel,
   type Team,
 } from "@autochess/sim";
+import { AUGMENT_ROUNDS, AUGMENTS, AUGMENTS_BY_ID, TIER_PATTERNS, type AugmentTier } from "./augments.js";
 import { drawOmenChoices, resolveOmenVote, rulesForOmen } from "./omens.js";
 import {
   BENCH_SIZE,
@@ -69,6 +71,10 @@ export interface PlayerState {
   missedShops: Map<string, number>;
   omenVote: string | null;
   lastResult: "win" | "loss" | "draw" | null;
+  augments: string[];
+  /** Augments proposés en attente de choix (vide hors des rounds d'augment). */
+  augmentChoices: string[];
+  augmentRerolls: number;
 }
 
 export type Phase = "omen" | "armory" | "planning" | "combat" | "ended";
@@ -134,6 +140,8 @@ export class Game {
   readonly players = new Map<string, PlayerState>();
   readonly pool = new Map<string, number>();
   readonly omenChoices: string[];
+  /** Rareté de chacun des 3 choix d'augment, identique pour tous les joueurs. */
+  readonly augmentTiers: readonly AugmentTier[];
   omen: string | null = null;
   /** Précision tirée au sort par certains présages (ex. : le panthéon favori). */
   omenDetail: string | null = null;
@@ -177,10 +185,14 @@ export class Game {
         recentOpponents: [],
         missedShops: new Map(),
         omenVote: null,
+        augments: [],
+        augmentChoices: [],
+        augmentRerolls: 0,
         lastResult: null,
       });
     }
     this.omenChoices = drawOmenChoices(this.rng);
+    this.augmentTiers = TIER_PATTERNS[this.rng.int(TIER_PATTERNS.length)]!;
   }
 
   // ---------------------------------------------------------------- abonnements
@@ -230,6 +242,7 @@ export class Game {
         this.autoPickArmory();
         break;
       case "planning":
+        this.autoChooseAugments();
         this.startCombat();
         break;
       case "combat":
@@ -275,10 +288,11 @@ export class Game {
     this.deadline = this.time + TIMERS.planningMs;
     const firstRoundOfStage = this.round === 1;
     for (const p of this.alivePlayers()) {
-      const interest = Math.min(this.rules.interestCap, Math.floor(p.gold / 10));
-      p.gold += passiveIncome(this.stage, this.round) + interest + streakBonus(p.streak) + this.rules.bonusGoldPerRound;
-      this.addXp(p, PASSIVE_XP_PER_ROUND);
-      p.freeRerolls = this.rules.freeRerollsPerRound;
+      const bonus = this.augmentBonuses(p);
+      const interest = Math.min(this.rules.interestCap + bonus.interestCap, Math.floor(p.gold / 10));
+      p.gold += passiveIncome(this.stage, this.round) + interest + streakBonus(p.streak) + this.rules.bonusGoldPerRound + bonus.gold;
+      this.addXp(p, PASSIVE_XP_PER_ROUND + bonus.xp);
+      p.freeRerolls = this.rules.freeRerollsPerRound + bonus.freeRerolls;
       if (firstRoundOfStage && this.stage === this.rules.completedItemAtStage) {
         this.giveItem(p, COMPLETED[this.rng.int(COMPLETED.length)]!);
       }
@@ -286,8 +300,97 @@ export class Game {
       this.tryMerge(p);
       if (p.shopLocked) p.shopLocked = false;
       else this.rollShop(p);
+      const augmentIndex = this.augmentIndex();
+      if (augmentIndex !== null) {
+        p.augmentChoices = this.drawAugmentChoices(p, this.augmentTiers[augmentIndex]!);
+        p.augmentRerolls = 1;
+      }
     }
     this.runBots();
+  }
+
+  // ---------------------------------------------------------------- augments
+
+  /** Index du choix d'augment de ce round (0, 1 ou 2), ou null. */
+  augmentIndex(): number | null {
+    const i = AUGMENT_ROUNDS.findIndex(([stage, round]) => stage === this.stage && round === this.round);
+    return i >= 0 ? i : null;
+  }
+
+  chooseAugment(playerId: string, index: number): ActionResult {
+    const p = this.activePlayer(playerId);
+    if (!p) return fail("Player is not in the game");
+    const id = p.augmentChoices[index];
+    if (!id) return fail("No augment to choose");
+    p.augmentChoices = [];
+    p.augments.push(id);
+    this.applyAugment(p, id);
+    this.version++;
+    return ok;
+  }
+
+  rerollAugments(playerId: string): ActionResult {
+    const p = this.activePlayer(playerId);
+    if (!p) return fail("Player is not in the game");
+    if (!p.augmentChoices.length) return fail("No augment to reroll");
+    if (p.augmentRerolls <= 0) return fail("No augment reroll left");
+    p.augmentRerolls--;
+    const tier = AUGMENTS_BY_ID.get(p.augmentChoices[0]!)!.tier;
+    p.augmentChoices = this.drawAugmentChoices(p, tier, p.augmentChoices);
+    this.version++;
+    return ok;
+  }
+
+  private drawAugmentChoices(p: PlayerState, tier: AugmentTier, exclude: readonly string[] = []): string[] {
+    const pool = AUGMENTS.filter((a) => a.tier === tier && !p.augments.includes(a.id) && !exclude.includes(a.id)).map((a) => a.id);
+    return this.shuffle(pool).slice(0, 3);
+  }
+
+  /** Fin de la préparation sans choix : un augment est pris au hasard. */
+  private autoChooseAugments(): void {
+    for (const p of this.alivePlayers()) {
+      if (p.augmentChoices.length) this.chooseAugment(p.id, this.rng.int(p.augmentChoices.length));
+    }
+  }
+
+  private applyAugment(p: PlayerState, id: string): void {
+    const pick = AUGMENTS_BY_ID.get(id)!.onPick;
+    if (!pick) return;
+    p.gold += pick.gold ?? 0;
+    if (pick.xp) this.addXp(p, pick.xp);
+    if (pick.heal) p.hp = Math.min(START_HP, p.hp + pick.heal);
+    for (let i = 0; i < (pick.components ?? 0); i++) this.giveItem(p, COMPONENTS[this.rng.int(COMPONENTS.length)]!);
+    for (let i = 0; i < (pick.completedItems ?? 0); i++) this.giveItem(p, COMPLETED[this.rng.int(COMPLETED.length)]!);
+    for (let i = 0; i < (pick.units?.count ?? 0); i++) {
+      const cost = pick.units!.cost;
+      // Pour une ★2, on choisit une unité dont il reste au moins 3 exemplaires.
+      const copies = pick.units!.star === 2 ? 3 : 1;
+      const defId = this.drawFromPool((d) => this.content.units.get(d)!.cost === cost && this.pool.get(d)! >= copies, () => 1);
+      if (!defId) break;
+      this.pool.set(defId, this.pool.get(defId)! - (copies - 1));
+      const unit: OwnedUnit = { ...this.newUnit(defId), star: copies === 3 ? 2 : 1 };
+      if (!this.addUnit(p, unit)) {
+        p.gold += cost * copies;
+        this.returnToPool(defId, copies);
+      }
+    }
+  }
+
+  private augmentBonuses(p: PlayerState): { gold: number; xp: number; freeRerolls: number; interestCap: number } {
+    const total = { gold: 0, xp: 0, freeRerolls: 0, interestCap: 0 };
+    for (const id of p.augments) {
+      const a = AUGMENTS_BY_ID.get(id)!;
+      total.gold += a.perRound?.gold ?? 0;
+      total.xp += a.perRound?.xp ?? 0;
+      total.freeRerolls += a.perRound?.freeRerolls ?? 0;
+      total.interestCap += a.interestCapBonus ?? 0;
+    }
+    return total;
+  }
+
+  /** Bonus de combat d'un joueur : présage + augments. */
+  modifiersFor(p: PlayerState): Modifier[] {
+    return [...this.rules.combatModifiers, ...p.augments.flatMap((id) => AUGMENTS_BY_ID.get(id)!.combat ?? [])];
   }
 
   // ---------------------------------------------------------------- armurerie
@@ -373,12 +476,17 @@ export class Game {
     const kind = roundKind(this.stage, this.round);
     let longest = 0;
 
-    const fight = (a: PlayerState, boardB: readonly Placement[], record: (winner: Team | null, survivors: number) => void) => {
+    const fight = (
+      a: PlayerState,
+      boardB: readonly Placement[],
+      modifiersB: readonly Modifier[],
+      record: (winner: Team | null, survivors: number) => void,
+    ) => {
       const result = runBattle({
         seed: this.rng.int(2 ** 31),
         boards: [this.placements(a), boardB],
         content: this.content,
-        modifiers: [this.rules.combatModifiers, kind === "pve" ? [] : this.rules.combatModifiers],
+        modifiers: [this.modifiersFor(a), modifiersB],
       });
       longest = Math.max(longest, result.durationMs);
       const survivorStars = (team: Team) => result.survivors.filter((s) => s.team === team).reduce((n, s) => n + s.star, 0);
@@ -389,14 +497,14 @@ export class Game {
     if (kind === "pve") {
       const wave = pveWave(this.stage, this.round);
       for (const p of this.alivePlayers()) {
-        const { result } = fight(p, wave, (winner, enemyStars) =>
+        const { result } = fight(p, wave, [], (winner, enemyStars) =>
           this.pending.push({ playerId: p.id, pve: true, outcome: outcomeFor(winner, 0), enemySurvivorStars: enemyStars }),
         );
         this.emitBattle({ playerId: p.id, opponentId: null, ghost: false, side: 0, winner: result.winner, events: result.events });
       }
     } else {
       for (const [a, b, ghost] of this.pairPlayers()) {
-        const { result, survivorStars } = fight(a, this.placements(b), (winner, enemyStars) =>
+        const { result, survivorStars } = fight(a, this.placements(b), this.modifiersFor(b), (winner, enemyStars) =>
           this.pending.push({ playerId: a.id, pve: false, outcome: outcomeFor(winner, 0), enemySurvivorStars: enemyStars }),
         );
         this.emitBattle({ playerId: a.id, opponentId: b.id, ghost, side: 0, winner: result.winner, events: result.events });

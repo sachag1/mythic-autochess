@@ -43,6 +43,10 @@ export class GameRoom extends Room<{ state: GameStateSchema }> {
     });
     this.onMessage("vote", (client, msg: { omen: string }) => this.act(client, "vote", (g, id) => g.voteOmen(id, msg?.omen)));
     this.onMessage("pick", (client, msg: { offer: number }) => this.act(client, "pick", (g, id) => g.pickArmory(id, msg?.offer)));
+    this.onMessage("augment", (client, msg: { index: number }) =>
+      this.act(client, "augment", (g, id) => g.chooseAugment(id, msg?.index)),
+    );
+    this.onMessage("rerollAugments", (client) => this.act(client, "rerollAugments", (g, id) => g.rerollAugments(id)));
     this.onMessage("buy", (client, msg: { slot: number }) => this.act(client, "buy", (g, id) => g.buy(id, msg?.slot)));
     this.onMessage("sell", (client, msg: { at: Location }) => this.act(client, "sell", (g, id) => g.sell(id, msg?.at)));
     this.onMessage("reroll", (client) => this.act(client, "reroll", (g, id) => g.reroll(id)));
@@ -221,6 +225,9 @@ export class GameRoom extends Room<{ state: GameStateSchema }> {
       syncStrings(ps.items, p.items);
       ps.omenVote = p.omenVote ?? "";
       ps.lastResult = p.lastResult ?? "";
+      syncStrings(ps.augments, p.augments);
+      syncStrings(ps.augmentChoices, p.augmentChoices);
+      ps.augmentRerolls = p.augmentRerolls;
       syncUnits(ps.bench, new Map(p.bench.flatMap((u, i) => (u ? [[String(i), u] as const] : []))));
       syncUnits(ps.board, p.board);
     }

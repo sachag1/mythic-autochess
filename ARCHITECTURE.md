@@ -145,6 +145,25 @@ est tiré au sort **pondéré par les votes**. Le présage change les règles po
 
 Ajouter un présage = ajouter une entrée dans `omens.ts`.
 
+### Augments : 3 choix par partie
+
+Comme dans TFT : aux rounds **2-1, 3-2 et 4-2**, chaque joueur voit 3 augments d'une même
+rareté (**argent**, **or** ou **prismatique**) et peut relancer la proposition une fois.
+Sans choix à la fin de la préparation, un augment est pris au hasard.
+
+- **Équité** : la suite de raretés (par exemple argent → or → prismatique) est tirée au
+  début de la partie et **identique pour tous les joueurs**.
+- **40 augments** (`game/augments.ts`) : économie (or, XP, rerolls gratuits, intérêts),
+  butin (composants, objets complets, unités), bonus de combat (stats, boucliers, soins,
+  éclairs…). Certains servent des styles précis : *Village Heroes* et *Legion of Heroes*
+  pour le reroll de petits persos, *Favor of Olympus* pour les compos de gros persos (3 à 5 pièces),
+  *Hoplite Drill* pour la ligne de front.
+- Messages : `augment {index}`, `rerollAugments`. État : `augments` (public),
+  `augmentChoices` et `augmentRerolls` (privés).
+- **Équilibrage** : `npm run augments -w @autochess/server -- 800` joue 800 parties entre
+  bots qui prennent leurs augments au hasard et donne la place moyenne de chaque augment
+  (4,5 = neutre ; cible entre 4,1 et 4,9 dans sa rareté).
+
 ## `packages/client` (après)
 
 - **Vite + Three.js** (moteur WebGPU avec repli WebGL), **React** pour l'interface.

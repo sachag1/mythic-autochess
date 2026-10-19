@@ -32,11 +32,18 @@ export function createBot(seed: number, style?: BotStyle) {
       return;
     }
     if (game.phase !== "planning") return;
+    // Choix d'augment au hasard : les mesures d'équilibrage restent sans biais.
+    if (p.augmentChoices.length) game.chooseAugment(playerId, rng.int(p.augmentChoices.length));
 
     const reserve = game.stage >= 3 ? (botStyle === "reroll" && p.level >= TARGET_LEVEL.reroll(game.stage) ? 10 : 30) : 0;
     buyFromShop(game, p, reserve);
     while (p.level < TARGET_LEVEL[botStyle](game.stage) && p.gold - game.rules.xpCost >= reserve) {
       if (!game.buyXp(playerId).ok) break;
+    }
+    // Les rerolls gratuits sont toujours utilisés.
+    for (let i = 0; i < 4 && p.freeRerolls > 0; i++) {
+      game.reroll(playerId);
+      buyFromShop(game, p, reserve);
     }
     for (let i = 0; i < MAX_REROLLS_PER_ROUND && p.gold - game.rules.rerollCost >= Math.max(reserve, 20); i++) {
       if (!game.reroll(playerId).ok) break;

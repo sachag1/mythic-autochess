@@ -11,4 +11,5 @@ npm run balance -w @autochess/sim   # équilibrage unité par unité et synergie
 npm run comps -w @autochess/sim     # tournoi de compositions (~1 min)
 npm start -w @autochess/server      # serveur de jeu sur ws://localhost:2567
 npm run simulate -w @autochess/server -- 100   # 100 parties entre bots
+npm run augments -w @autochess/server -- 800   # équilibrage des augments (~3 min)
 ```
