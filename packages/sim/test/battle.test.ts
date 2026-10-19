@@ -152,6 +152,18 @@ describe("battle", () => {
     }
   });
 
+  it("lets any 1 or 2-cost unit beat every stage-1 wave on its own", () => {
+    for (const round of ["1-2", "1-3", "1-4"]) {
+      for (const unit of UNITS.filter((u) => u.cost <= 2)) {
+        const hex = unit.stats.range <= 1 ? { col: 3, row: 3 } : { col: 3, row: 0 };
+        for (let seed = 0; seed < 5; seed++) {
+          const result = runBattle({ seed, boards: [[{ defId: unit.id, star: 1, hex }], PVE_WAVES[round]!], content });
+          expect(result.winner, `${round} ${unit.id} seed ${seed}`).toBe(0);
+        }
+      }
+    }
+  });
+
   it("rejects invalid boards", () => {
     const unknown: Placement[] = [{ defId: "nobody", star: 1, hex: { col: 0, row: 0 } }];
     const outside: Placement[] = [{ defId: "medusa", star: 1, hex: { col: 0, row: 5 } }];

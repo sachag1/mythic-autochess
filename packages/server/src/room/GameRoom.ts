@@ -226,6 +226,7 @@ export class GameRoom extends Room<{ state: GameStateSchema }> {
       ps.omenVote = p.omenVote ?? "";
       ps.lastResult = p.lastResult ?? "";
       syncStrings(ps.augments, p.augments);
+      syncStrings(ps.lastLoot, p.lastLoot);
       syncStrings(ps.augmentChoices, p.augmentChoices);
       ps.augmentRerolls = p.augmentRerolls;
       syncUnits(ps.bench, new Map(p.bench.flatMap((u, i) => (u ? [[String(i), u] as const] : []))));

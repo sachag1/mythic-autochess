@@ -39,6 +39,8 @@ export const PlayerSchema = schema(
     omenVote: t.string(),
     lastResult: t.string(),
     augments: t.array("string"),
+    /** Butin du dernier round PvE : "item:<id>", "gold:<n>", "unit:<id>" ou "sold:<id>" (banc plein, revendu). */
+    lastLoot: t.array("string"),
     /** Augments proposés, privés : seul le joueur concerné les reçoit. */
     augmentChoices: t.array("string").view(),
     augmentRerolls: t.uint8().view(),

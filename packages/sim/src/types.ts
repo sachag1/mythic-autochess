@@ -53,8 +53,14 @@ export type AreaDef =
 /** Les effets touchent soit les ennemis, soit les alliés de celui qui les lance. */
 export type Affects = "enemies" | "allies";
 
-/** "ap" : montant × puissance / 100. "ad" : montant × dégâts d'attaque (montant = ratio). */
-export type Scaling = "ap" | "ad" | "none";
+/**
+ * "ap" : montant × puissance / 100. "ad" : montant × dégâts d'attaque (montant = ratio).
+ * "maxHp" : montant en % des PV max de celui qui lance l'effet.
+ */
+export type Scaling = "ap" | "ad" | "maxHp" | "none";
+
+/** Résistances qu'un effet « sunder » peut réduire. */
+export type ResistKey = "armor" | "magicResist";
 
 export type EffectDef =
   | {
@@ -85,7 +91,18 @@ export type EffectDef =
       durationMs?: number;
       area: AreaDef;
       affects?: Affects;
-    };
+    }
+  /**
+   * Brûlure : dégâts bruts égaux à `percentMaxHp` % des PV max de la cible chaque seconde.
+   * Ne se cumule pas : la plus forte s'applique, une nouvelle brûlure rafraîchit la durée.
+   */
+  | { kind: "burn"; percentMaxHp: number; durationMs: number; area: AreaDef }
+  /** Blessure : la cible reçoit `percent` % de soins en moins (la plus forte s'applique). */
+  | { kind: "wound"; percent: number; durationMs: number; area: AreaDef }
+  /** Réduit l'armure ou la résistance magique de la cible de `percent` % (la plus forte s'applique). */
+  | { kind: "sunder"; stat: ResistKey; percent: number; durationMs: number; area: AreaDef }
+  /** La cible ne peut plus être étourdie pendant `durationMs`. */
+  | { kind: "immunity"; durationMs: number; area: AreaDef; affects?: Affects };
 
 export interface AbilityDef {
   name: string;
@@ -96,12 +113,29 @@ export interface AbilityDef {
   effects: readonly EffectDef[];
 }
 
-export type TriggerDef =
-  | { on: "combatStart"; target: TargetRule; effects: readonly EffectDef[] }
-  | { on: "everyNAttacks"; n: number; target: TargetRule; effects: readonly EffectDef[] }
-  | { on: "onCast"; target: TargetRule; effects: readonly EffectDef[] }
-  | { on: "onAllyDeath"; target: TargetRule; effects: readonly EffectDef[] }
-  | { on: "interval"; everyMs: number; target: TargetRule; effects: readonly EffectDef[] };
+interface TriggerBase {
+  target: TargetRule;
+  effects: readonly EffectDef[];
+  /** Nombre maximum de déclenchements par combat (illimité si absent). */
+  limit?: number;
+}
+
+export type TriggerDef = TriggerBase &
+  (
+    | { on: "combatStart" }
+    | { on: "everyNAttacks"; n: number }
+    | { on: "onCast" }
+    | { on: "onAllyDeath" }
+    | { on: "interval"; everyMs: number }
+    /** Après un coup critique. */
+    | { on: "onCrit" }
+    /** Quand l'unité achève un ennemi. */
+    | { on: "onKill" }
+    /** Quand l'unité subit des dégâts (bouclier compris), au plus une fois par `cooldownMs`. */
+    | { on: "onDamageTaken"; cooldownMs: number }
+    /** Une seule fois par combat, quand les PV passent sous `percent` % des PV max. */
+    | { on: "hpBelow"; percent: number }
+  );
 
 export interface UnitDef {
   id: string;
@@ -204,7 +238,16 @@ export type BattleEvent =
   | { t: number; type: "heal"; source: number; target: number; amount: number; hp: number }
   | { t: number; type: "shield"; source: number; target: number; amount: number; durationMs: number }
   | { t: number; type: "stun"; source: number; target: number; durationMs: number }
+  /** `amount` négatif = malus (ex. : vitesse d'attaque réduite par un objet ennemi). */
   | { t: number; type: "buff"; source: number; target: number; stat: StatKey; amount: number; durationMs?: number }
+  /** Brûlure posée (ou rafraîchie) ; chaque seconde, un événement "damage" de type "true" suit. */
+  | { t: number; type: "burn"; source: number; target: number; percentMaxHp: number; durationMs: number }
+  /** Blessure : soins reçus réduits de `percent` %. */
+  | { t: number; type: "wound"; source: number; target: number; percent: number; durationMs: number }
+  /** Armure ou résistance magique réduite de `percent` %. */
+  | { t: number; type: "sunder"; source: number; target: number; stat: ResistKey; percent: number; durationMs: number }
+  /** Immunité aux étourdissements. */
+  | { t: number; type: "immunity"; source: number; target: number; durationMs: number }
   | { t: number; type: "death"; unit: number; killer: number }
   | { t: number; type: "end"; winner: Team | null; survivors: number[] };
 
