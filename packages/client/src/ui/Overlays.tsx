@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { augmentDef, COST_COLORS, itemDef, omenDef, TIER_LABELS, unitColor, unitDef } from "../data/content";
 import { actions, leave, useStore } from "../net/store";
 import type { GameSnap, PlayerSnap } from "../net/types";
@@ -263,5 +263,49 @@ export function ScoutPill({ name, onBack }: { name: string; onBack: () => void }
     <button className="scout-pill" onClick={onBack}>
       👁 Plateau de {name} — revenir au vôtre
     </button>
+  );
+}
+
+/** Butin du dernier round PvE, affiché à l'ouverture des orbes. */
+export function LootPopup({ loot, onDone }: { loot: readonly string[]; onDone: () => void }) {
+  // Fermeture après 4 s, sans redémarrer le minuteur à chaque rendu du parent.
+  const done = useRef(onDone);
+  done.current = onDone;
+  useEffect(() => {
+    const id = setTimeout(() => done.current(), 4200);
+    return () => clearTimeout(id);
+  }, []);
+  return (
+    <div className="loot-popup">
+      <div className="loot-title">Butin</div>
+      <div className="loot-items">
+        {loot.map((entry, i) => {
+          const [kind, value = ""] = entry.split(":");
+          if (kind === "item")
+            return (
+              <div key={i} className="loot-item" style={{ animationDelay: `${0.5 + i * 0.12}s` }}>
+                <ItemChip id={value} size={34} />
+                <span>{itemDef(value)?.name ?? value}</span>
+              </div>
+            );
+          if (kind === "gold")
+            return (
+              <div key={i} className="loot-item gold" style={{ animationDelay: `${0.5 + i * 0.12}s` }}>
+                <span className="coin" /> <span>+{value} or</span>
+              </div>
+            );
+          const def = unitDef(value);
+          return (
+            <div key={i} className="loot-item" style={{ animationDelay: `${0.5 + i * 0.12}s` }}>
+              <UnitPortrait defId={value} size={34} />
+              <span>
+                {def?.name ?? value}
+                <small>{kind === "sold" ? " — revendu (banc plein)" : " — rejoint le banc"}</small>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

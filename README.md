@@ -23,6 +23,10 @@ npm run dev -w @autochess/client    # dans un autre terminal : http://localhost:
 Ouvre http://localhost:5173, choisis un pseudo et lance la partie : les places vides sont
 prises par des bots.
 
+Les personnages réalistes Mixamo sont optionnels (leur licence interdit de redistribuer les
+fichiers 3D) : sans eux, le jeu utilise les personnages KayKit fournis. Pour les ajouter, voir
+[packages/client/MIXAMO.md](packages/client/MIXAMO.md).
+
 ## Développement
 
 ```bash
@@ -48,7 +52,8 @@ L'architecture (simulation déterministe, serveur qui fait autorité, protocole 
 
 Le code est sous licence [MIT](LICENSE).
 
-Les modèles 3D de `packages/client/public/assets` viennent de packs **CC0** (domaine
-public) de Kay Lousberg (KayKit) et de Quaternius : voir
+Les modèles 3D, textures et ciels de `packages/client/public/assets` sont **CC0** (domaine
+public) : packs de Kay Lousberg (KayKit) et de Quaternius, modèles, textures et HDRI de
+Poly Haven. Les portraits sont des rendus du jeu. Voir
 [CREDITS.md](packages/client/public/assets/CREDITS.md). Les personnages et récits
 mythologiques sont du domaine public.

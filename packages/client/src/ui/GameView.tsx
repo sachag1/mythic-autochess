@@ -1,9 +1,10 @@
+import { MONSTERS } from "@autochess/sim";
 import { useEffect, useRef, useState } from "react";
-import { actions, useStore } from "../net/store";
+import { actions, getState, useStore } from "../net/store";
 import { BoardScene, type HoverInfo } from "../scene/BoardScene";
 import { ItemChip } from "./common";
 import { autoArrange, ItemBench, PlayersPanel, ShopBar, TopBar, TraitsPanel } from "./Hud";
-import { Armory, AugmentPicker, BattleBanner, Eliminated, GameOver, OmenVote, ScoutPill, Toasts, UnitTooltip } from "./Overlays";
+import { LootPopup, Armory, AugmentPicker, BattleBanner, Eliminated, GameOver, OmenVote, ScoutPill, Toasts, UnitTooltip } from "./Overlays";
 
 /** Écran de jeu : plateau 3D plein écran et interface par-dessus. */
 export function GameView() {
@@ -20,6 +21,12 @@ export function GameView() {
   const [dragging, setDragging] = useState<{ defId: string; star: number } | null>(null);
   const [itemDrag, setItemDrag] = useState<{ index: number; id: string; x: number; y: number } | null>(null);
   const [backend, setBackend] = useState("");
+  const [loading, setLoading] = useState<{ progress: number; done: boolean }>({ progress: 0, done: false });
+  const [perf, setPerf] = useState("");
+  const [levelUp, setLevelUp] = useState<number | null>(null);
+  const [loot, setLoot] = useState<string[] | null>(null);
+  const lootShown = useRef("");
+  const lastLevel = useRef<number | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<BoardScene | null>(null);
 
@@ -30,6 +37,7 @@ export function GameView() {
       onHover: setHover,
       onDrag: setDragging,
       onReady: setBackend,
+      onLoading: (progress, done) => setLoading({ progress, done }),
     });
     sceneRef.current = scene;
     // Accès depuis la console en développement (débogage).
@@ -48,6 +56,68 @@ export function GameView() {
   useEffect(() => {
     sceneRef.current?.setPlanning({ player: viewed, own, canEditBoard, canEditBench });
   }, [viewed, own, canEditBoard, canEditBench]);
+
+  // Comme dans TFT : juste avant le combat, s'il reste de la place sur le plateau et des
+  // unités sur le banc, on complète le plateau automatiquement (message « arrange »).
+  const autoFilled = useRef("");
+  useEffect(() => {
+    if (phase !== "planning" || !me?.alive) return;
+    const round = `${game.stage}-${game.round}`;
+    const id = setInterval(() => {
+      if (autoFilled.current === round || Date.now() < game.phaseEndsAt - 1500) return;
+      const latest = getState().game?.players[sessionId];
+      const layout = latest ? autoArrange(latest) : null;
+      autoFilled.current = round;
+      if (layout) actions.arrange(layout);
+    }, 200);
+    return () => clearInterval(id);
+  }, [phase, game.stage, game.round, game.phaseEndsAt, me?.alive, sessionId]);
+
+  // Préchauffage prioritaire des corps visibles bientôt : plateaux et bancs de tous les
+  // joueurs, boutique, monstres PvE (le reste se fait lentement en tâche de fond).
+  const warmIds = [
+    ...new Set([
+      ...Object.values(game.players).flatMap((p) => [...Object.values(p.board), ...Object.values(p.bench)].map((u) => u.defId)),
+      ...(me?.shop ?? []).filter(Boolean),
+      ...MONSTERS.map((m) => m.id),
+    ]),
+  ]
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (phase !== "combat") void sceneRef.current?.prewarmUnits(warmIds.split(",").filter(Boolean));
+  }, [warmIds, phase]);
+
+  // Butin PvE : à la fin du combat, les orbes s'ouvrent et le butin s'affiche.
+  const lootKey = me?.lastLoot?.length ? `${game.stage}-${game.round}|${me.lastLoot.join(",")}` : "";
+  useEffect(() => {
+    if (!lootKey || phase === "combat" || lootShown.current === lootKey) return;
+    lootShown.current = lootKey;
+    const entries = me?.lastLoot ?? [];
+    sceneRef.current?.openLoot(entries);
+    const id = setTimeout(() => setLoot(entries), 900);
+    return () => clearTimeout(id);
+  }, [lootKey, phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Montée de niveau : bannière dorée.
+  const myLevel = me?.level ?? null;
+  useEffect(() => {
+    if (myLevel !== null && lastLevel.current !== null && myLevel > lastLevel.current) setLevelUp(myLevel);
+    lastLevel.current = myLevel;
+  }, [myLevel]);
+
+  // Bannières de l'arène aux couleurs du panthéon favori (présage « Faveur du Panthéon »).
+  const theme = game.omen === "favored_pantheon" ? game.omenDetail : null;
+  useEffect(() => sceneRef.current?.setTheme(theme || null), [theme]);
+
+  // Images par seconde et niveau de qualité (coin de l'écran).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const s = sceneRef.current;
+      if (s) setPerf(`${s.backend} · ${s.qualityLevel} · ${Math.round(s.fps)} i/s`);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const opponent = battle?.report.opponentId ? (game.players[battle.report.opponentId] ?? null) : null;
   useEffect(() => {
@@ -126,8 +196,26 @@ export function GameView() {
           <ItemChip id={itemDrag.id} size={36} title={false} />
         </div>
       )}
+      {loot && <LootPopup loot={loot} onDone={() => setLoot(null)} />}
+      {levelUp !== null && (
+        <div key={levelUp} className="level-up" onAnimationEnd={() => setLevelUp(null)}>
+          Niveau {levelUp}
+        </div>
+      )}
       <Toasts />
-      {backend && <div className="backend-badge">{backend}</div>}
+      {backend && <div className="backend-badge">{perf || backend}</div>}
+      {!loading.done && (
+        <div className="loading-screen">
+          <div className="loading-card">
+            <h2>Mythic Chess</h2>
+            <p>Les dieux descendent dans l'arène…</p>
+            <div className="loading-bar">
+              <i style={{ width: `${Math.round(loading.progress * 100)}%` }} />
+            </div>
+            <span className="muted small">{Math.round(loading.progress * 100)} %</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

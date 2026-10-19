@@ -1,0 +1,399 @@
+/* ==================================================================
+   Habillage « Olympe » : pierre sombre, liserés dorés, capitales romaines.
+   Sobre et lisible ; surcharge les styles de base (styles.css).
+   ================================================================== */
+:root {
+  --title-font: "Cinzel", "Trajan Pro", Georgia, serif;
+  --stone: rgba(17, 18, 24, 0.84);
+  --stone-hi: rgba(32, 33, 42, 0.92);
+  --gold-line: rgba(217, 178, 92, 0.55);
+  --parchment: #efe6d2;
+  --text: #efe6d2;
+}
+html,
+body,
+#root {
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+/* Panneaux : fond de pierre, liseré doré discret. */
+.top-bar,
+.player-row,
+.trait-row,
+.item-bench,
+.shop-bar,
+.traits-panel.empty,
+.battle-vs,
+.tooltip,
+.lobby-card,
+.end-card {
+  background: linear-gradient(180deg, var(--stone-hi), var(--stone));
+  border: 1px solid var(--gold-line);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 230, 170, 0.08),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+}
+.lobby-card,
+.end-card {
+  position: relative;
+}
+/* Petits losanges dorés aux coins des grands panneaux. */
+.shop-bar::before,
+.shop-bar::after,
+.lobby-card::before,
+.lobby-card::after,
+.end-card::before,
+.end-card::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  width: 9px;
+  height: 9px;
+  background: #d9b25c;
+  transform: rotate(45deg);
+  box-shadow: 0 0 6px rgba(217, 178, 92, 0.7);
+  z-index: 3;
+}
+.shop-bar::before,
+.lobby-card::before,
+.end-card::before {
+  left: 18px;
+}
+.shop-bar::after,
+.lobby-card::after,
+.end-card::after {
+  right: 18px;
+}
+
+/* Titres. */
+.overlay-title h2,
+.lobby-card h1,
+.lobby-card h2,
+.end-card h2,
+.loading-card h2 {
+  font-family: var(--title-font);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #e8c878;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+}
+.overlay-title h2::after {
+  content: "";
+  display: block;
+  width: 140px;
+  height: 1px;
+  margin: 8px auto 0;
+  background: linear-gradient(90deg, transparent, #d9b25c, transparent);
+}
+
+/* Barre du haut : médaillon de l'étape. */
+.top-bar {
+  border-radius: 12px;
+  padding: 5px 10px 5px 5px;
+}
+.top-bar .stage {
+  background: radial-gradient(circle at 50% 30%, #3a3020, #15120c);
+  border: 1px solid var(--gold-line);
+  border-radius: 9px;
+}
+.top-bar .stage b {
+  font-family: var(--title-font);
+  color: #f0d48a;
+}
+.top-bar .phase > span:first-child {
+  font-family: var(--title-font);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-size: 12px;
+  color: var(--parchment);
+}
+.timer {
+  background: #1d1a14;
+  border: 1px solid var(--gold-line);
+  color: #f0d48a;
+}
+.timer.urgent {
+  background: #4a1414;
+  border-color: #c84a3a;
+  color: #ffd0c0;
+}
+.omen-badge {
+  background: linear-gradient(90deg, #2a1f3a, #1a1424);
+  border: 1px solid rgba(180, 140, 255, 0.45);
+}
+
+/* Boutons. */
+.btn {
+  background: linear-gradient(180deg, #2c2a26, #1a1916);
+  border: 1px solid var(--gold-line);
+  color: var(--parchment);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.btn:hover:not(:disabled) {
+  filter: none;
+  border-color: #e8c878;
+  box-shadow: 0 0 10px rgba(232, 200, 120, 0.3);
+}
+.btn.primary {
+  background: linear-gradient(180deg, #e8c46a, #a87a2a);
+  border-color: #f6dc96;
+  color: #1c1406;
+  font-family: var(--title-font);
+  letter-spacing: 1px;
+}
+
+/* Joueurs. */
+.player-row {
+  border-radius: 6px;
+}
+.player-row.me {
+  border-color: #e8c878;
+  box-shadow: inset 3px 0 0 #e8c878, 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.player-hp i {
+  background: linear-gradient(90deg, #2f9a5a, #7ae09a);
+}
+
+/* Synergies : médaillons bronze, argent, or. */
+.trait-row {
+  border-radius: 6px;
+}
+.trait-row.tier-1 .trait-count {
+  background: linear-gradient(135deg, #c8844a, #7a4a22);
+  color: #fff3e0;
+}
+.trait-row.tier-2 .trait-count {
+  background: linear-gradient(135deg, #f0f4f8, #8a96a6);
+}
+.trait-row.tier-3 .trait-count {
+  background: linear-gradient(135deg, #ffe08a, #b8862b);
+}
+.trait-name {
+  font-family: var(--title-font);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+/* Boutique : cartes illustrées par les portraits 3D. */
+.shop-bar {
+  border-radius: 10px;
+  padding: 10px;
+}
+.shop-card {
+  width: 136px;
+  height: 128px;
+  border: 2px solid var(--cost);
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--pantheon) 55%, #1a1a22), #0c0d12 80%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 4px 10px rgba(0, 0, 0, 0.5);
+}
+.shop-card .card-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
+  pointer-events: none;
+  transition: transform 0.25s;
+}
+.shop-card:hover .card-art {
+  transform: scale(1.06);
+}
+.shop-card .card-traits {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.shop-card .trait-tag {
+  background: rgba(10, 10, 14, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 9.5px;
+}
+.shop-card .card-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  background: linear-gradient(0deg, rgba(8, 8, 12, 0.95) 30%, transparent);
+  padding: 16px 8px 6px;
+}
+.shop-card .card-name {
+  font-family: var(--title-font);
+  font-size: 12.5px;
+  letter-spacing: 0.4px;
+  text-shadow: 0 1px 3px #000;
+}
+.shop-card .card-cost {
+  color: #f0d48a;
+}
+.shop-card .copies {
+  z-index: 1;
+  text-shadow: 0 1px 3px #000;
+}
+.shop-card.cost-4,
+.shop-card.cost-5 {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+    0 0 14px color-mix(in srgb, var(--cost) 45%, transparent);
+}
+.shop-card.bought {
+  animation: card-bought 0.35s ease-in forwards;
+}
+@keyframes card-bought {
+  to {
+    transform: translateY(-30px) scale(0.7);
+    opacity: 0;
+  }
+}
+.unit-portrait {
+  overflow: hidden;
+  border-width: 2px;
+}
+.unit-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 15%;
+}
+
+/* Fenêtres (présage, augments, armurerie). */
+.omen-card,
+.augment-card,
+.armory-offer {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+.omen-card {
+  background: linear-gradient(170deg, #241f30, #121119);
+  border: 1px solid rgba(217, 178, 92, 0.45);
+}
+.omen-card h3,
+.augment-card h3 {
+  font-family: var(--title-font);
+  letter-spacing: 1px;
+}
+
+/* Infobulle. */
+.tooltip {
+  border-radius: 8px;
+}
+.tt-head b {
+  font-family: var(--title-font);
+  letter-spacing: 0.5px;
+}
+
+/* Étiquettes au-dessus des unités. */
+.hp-bar {
+  border-color: rgba(0, 0, 0, 0.85);
+  box-shadow: 0 0 0 1px rgba(217, 178, 92, 0.25);
+}
+
+/* Montée de niveau. */
+.level-up {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, -50%);
+  font-family: var(--title-font);
+  font-size: 44px;
+  letter-spacing: 4px;
+  color: #f0d48a;
+  text-shadow: 0 0 24px rgba(240, 212, 138, 0.7), 0 3px 8px #000;
+  pointer-events: none;
+  animation: level-up 1.8s ease-out forwards;
+  z-index: 20;
+}
+@keyframes level-up {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -70%) scale(1);
+  }
+}
+
+/* Butin des rounds PvE. */
+.loot-popup {
+  position: absolute;
+  left: 50%;
+  bottom: 180px;
+  transform: translateX(-50%);
+  z-index: 25;
+  min-width: 260px;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, rgba(32, 33, 42, 0.95), rgba(17, 18, 24, 0.95));
+  border: 1px solid rgba(217, 178, 92, 0.55);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  animation: loot-in 0.35s ease-out, loot-out 0.4s ease-in 3.8s forwards;
+  pointer-events: none;
+}
+.loot-title {
+  font-family: var(--title-font);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #e8c878;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.loot-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.loot-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  opacity: 0;
+  animation: loot-item 0.35s ease-out forwards;
+}
+.loot-item small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.loot-item.gold {
+  color: #f0d48a;
+}
+@keyframes loot-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.9);
+  }
+}
+@keyframes loot-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+}
+@keyframes loot-item {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

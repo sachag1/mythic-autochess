@@ -30,6 +30,8 @@ export interface PlayerSnap {
   items: string[];
   omenVote: string;
   lastResult: string;
+  /** Butin du dernier round PvE : « item:<id> », « gold:<n> », « unit:<defId> », « sold:<defId> ». */
+  lastLoot?: string[];
   augments: string[];
   augmentChoices?: string[];
   augmentRerolls?: number;

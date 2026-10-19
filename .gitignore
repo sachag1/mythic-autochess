@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.log
 .env
+
+# Modèles Mixamo convertis : usage libre dans le jeu, redistribution des fichiers interdite (voir MIXAMO.md)
+packages/client/public/assets/mixamo/
