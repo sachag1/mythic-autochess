@@ -3,6 +3,35 @@ import type { Placement, UnitDef } from "../types.js";
 import { abilityValues, adRatio, durationValues, roleStats } from "./balance.js";
 
 export const MONSTERS: readonly UnitDef[] = [
+  // Étape 1 : des créatures volontairement inoffensives, n'importe quel personnage les bat.
+  {
+    id: "wolf_pup",
+    name: "Wolf Pup",
+    cost: 1,
+    traits: [],
+    stats: roleStats("bruiser", 1, { maxHp: -500, attackDamage: -48, armor: -30, magicResist: -30 }),
+    ability: {
+      name: "Nip",
+      description: "A tiny bite.",
+      target: "currentTarget",
+      castTimeMs: 300,
+      effects: [{ kind: "damage", damageType: "physical", amount: adRatio(1), scaling: "ad", area: { shape: "single" } }],
+    },
+  },
+  {
+    id: "harpy_chick",
+    name: "Harpy Chick",
+    cost: 1,
+    traits: [],
+    stats: roleStats("marksman", 1, { maxHp: -330, attackDamage: -45, armor: -15, magicResist: -15 }),
+    ability: {
+      name: "Squawk",
+      description: "A shrill little cry.",
+      target: "currentTarget",
+      castTimeMs: 300,
+      effects: [{ kind: "damage", damageType: "magic", amount: abilityValues(1, 20), scaling: "ap", area: { shape: "single" } }],
+    },
+  },
   {
     id: "wolf",
     name: "Dire Wolf",
@@ -85,9 +114,9 @@ const at = (defId: string, star: 1 | 2 | 3, col: number, row: number): Placement
 
 /** Vagues PvE, par étape. Clé = "étape-round". */
 export const PVE_WAVES: Record<string, readonly Placement[]> = {
-  "1-2": [at("wolf", 1, 2, 3), at("wolf", 1, 4, 3)],
-  "1-3": [at("wolf", 1, 2, 3), at("wolf", 1, 4, 3), at("harpy", 1, 3, 0)],
-  "1-4": [at("wolf", 1, 3, 3), at("harpy", 1, 2, 0), at("harpy", 1, 4, 0)],
+  "1-2": [at("wolf_pup", 1, 2, 3), at("wolf_pup", 1, 4, 3)],
+  "1-3": [at("wolf_pup", 1, 2, 3), at("wolf_pup", 1, 4, 3), at("harpy_chick", 1, 3, 0)],
+  "1-4": [at("wolf_pup", 1, 3, 3), at("harpy_chick", 1, 2, 0), at("harpy_chick", 1, 4, 0)],
   "2-7": [at("minotaur", 1, 3, 3), at("wolf", 2, 2, 3), at("wolf", 2, 4, 3)],
   "3-7": [at("hydra", 1, 3, 3)],
   "4-7": [at("hydra", 2, 3, 3), at("minotaur", 2, 2, 3), at("minotaur", 2, 4, 3)],

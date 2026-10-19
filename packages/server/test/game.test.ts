@@ -166,6 +166,43 @@ describe("shop and economy", () => {
   });
 });
 
+describe("PvE", () => {
+  it("never damages players during stage 1, even with an empty board", () => {
+    const game = newGame(2, 21);
+    for (let i = 0; i < 50 && game.stage === 1; i++) {
+      for (const p of game.players.values()) {
+        p.bench.fill(null);
+        p.board.clear();
+      }
+      game.skipPhase();
+    }
+    for (const p of game.players.values()) expect(p.hp).toBe(100);
+  });
+
+  it("gives every player the same loot over 4 PvE rounds, whatever the order", () => {
+    const players = Array.from({ length: 4 }, (_, i) => ({ id: `b${i}`, name: `B${i}`, isBot: true }));
+    const game = new Game({ seed: 22, players });
+    players.forEach((p, i) => game.setBotBrain(p.id, createBot(i).brain));
+    const kinds = new Map(players.map((p) => [p.id, [] as string[]]));
+    let lastKey = "";
+    for (let i = 0; i < 20_000 && !game.isOver() && game.stage <= 3; i++) {
+      game.tick(1000);
+      const key = `${game.stage}-${game.round}-${game.phase}`;
+      if (key !== lastKey && game.phase !== "combat") {
+        for (const p of game.players.values()) {
+          if (p.lastLoot.length && lastKey.endsWith("combat")) kinds.get(p.id)!.push(p.lastLoot[0]!.split(":")[0]!);
+        }
+      }
+      lastKey = key;
+    }
+    // 4 rounds PvE en étapes 1 à 3 (1-2, 1-3, 1-4, 2-7) : 2 objets, 1 or, 1 champion pour chacun.
+    for (const [id, got] of kinds) {
+      const first4 = got.slice(0, 4).map((k) => (k === "unit" || k === "sold" ? "champion" : k)).sort();
+      expect(first4, id).toEqual(["gold", "item", "item", "champion"].sort());
+    }
+  });
+});
+
 describe("auto-fill", () => {
   it("moves the best bench units onto empty board slots when combat starts", () => {
     const game = newGame(2, 11);

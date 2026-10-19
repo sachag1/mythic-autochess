@@ -72,6 +72,10 @@ export interface PlayerState {
   omenVote: string | null;
   lastResult: "win" | "loss" | "draw" | null;
   augments: string[];
+  /** Sac d'orbes PvE : tout le monde a le même contenu, seul l'ordre change. */
+  orbBag: OrbKind[];
+  /** Butin du dernier round PvE : "item:<id>", "gold:<n>", "unit:<id>" ou "sold:<id>" (banc plein). */
+  lastLoot: string[];
   /** Augments proposés en attente de choix (vide hors des rounds d'augment). */
   augmentChoices: string[];
   augmentRerolls: number;
@@ -119,6 +123,13 @@ const RECIPES = new Map(
   ITEMS.filter((i) => i.components).map((i) => [recipeKey(i.components![0], i.components![1]), i.id]),
 );
 const COPIES_BY_STAR: Record<StarLevel, number> = { 1: 1, 2: 3, 3: 9 };
+
+export type OrbKind = "component" | "gold" | "champion";
+/**
+ * Contenu du sac d'orbes PvE de chaque joueur. Quand il est vide, on le remplit à nouveau
+ * et on le mélange : sur 4 rounds PvE, tout le monde a reçu exactement le même butin.
+ */
+const ORB_BAG: readonly OrbKind[] = ["component", "component", "gold", "champion"];
 
 function recipeKey(a: string, b: string): string {
   return [a, b].sort().join("+");
@@ -186,6 +197,8 @@ export class Game {
         missedShops: new Map(),
         omenVote: null,
         augments: [],
+        orbBag: [],
+        lastLoot: [],
         augmentChoices: [],
         augmentRerolls: 0,
         lastResult: null,
@@ -542,6 +555,42 @@ export class Game {
     }
   }
 
+  private drawOrb(p: PlayerState): OrbKind {
+    if (!p.orbBag.length) p.orbBag = this.shuffle(ORB_BAG);
+    return p.orbBag.pop()!;
+  }
+
+  /**
+   * Ouvre un orbe. Valeurs équivalentes : un composant, ou 3 or à l'étape 1 (5 ensuite), ou un
+   * champion (2 pièces à l'étape 1, 3 aux étapes 2-3, 4 ensuite) avec 1 or.
+   */
+  private openOrb(p: PlayerState, kind: OrbKind): string[] {
+    if (kind === "component") {
+      const item = COMPONENTS[this.rng.int(COMPONENTS.length)]!;
+      this.giveItem(p, item);
+      return [`item:${item}`];
+    }
+    if (kind === "gold") {
+      const gold = this.stage === 1 ? 3 : 5;
+      p.gold += gold;
+      return [`gold:${gold}`];
+    }
+    const cost = this.stage === 1 ? 2 : this.stage <= 3 ? 3 : 4;
+    p.gold += 1;
+    const defId = this.drawFromPool((d) => this.content.units.get(d)!.cost === cost, () => 1);
+    if (!defId) {
+      p.gold += cost;
+      return [`gold:${cost + 1}`];
+    }
+    if (!this.addUnit(p, this.newUnit(defId))) {
+      // Banc plein : le champion est revendu automatiquement.
+      p.gold += cost;
+      this.returnToPool(defId, 1);
+      return [`sold:${defId}`, `gold:${cost + 1}`];
+    }
+    return [`unit:${defId}`, "gold:1"];
+  }
+
   /** Paires d'adversaires, en évitant de rejouer contre ses derniers adversaires. */
   private pairPlayers(): [PlayerState, PlayerState, boolean][] {
     const alive = this.alivePlayers();
@@ -574,17 +623,19 @@ export class Game {
     const multiplier =
       this.rules.damageMultiplier && this.stage >= this.rules.damageMultiplier.fromStage ? this.rules.damageMultiplier.multiplier : 1;
 
+    // Le butin affiché est celui du round qui vient de se terminer.
+    for (const p of this.alivePlayers()) p.lastLoot = [];
     for (const r of this.pending) {
       const p = this.players.get(r.playerId)!;
       p.lastResult = r.outcome;
-      if (r.outcome !== "win") {
+      // L'étape 1 est une mise en route : aucun dégât aux joueurs, comme dans TFT.
+      if (r.outcome !== "win" && this.stage > 1) {
         p.hp -= Math.round((stageDamage(this.stage) + r.enemySurvivorStars) * multiplier);
       }
       if (r.pve) {
-        // Butin normalisé : tout le monde reçoit la même quantité, victoire ou non.
-        for (let i = 0; i < 1 + this.rules.extraPveComponents; i++) {
-          this.giveItem(p, COMPONENTS[this.rng.int(COMPONENTS.length)]!);
-        }
+        // Butin normalisé : tout le monde reçoit un orbe de même valeur, victoire ou non.
+        p.lastLoot = this.openOrb(p, this.drawOrb(p));
+        for (let i = 0; i < this.rules.extraPveComponents; i++) p.lastLoot.push(...this.openOrb(p, "component"));
       } else if (r.outcome === "win") {
         p.streak = p.streak > 0 ? p.streak + 1 : 1;
       } else {

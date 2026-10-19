@@ -121,6 +121,17 @@ Chaque round PvP/PvE : préparation (30 s) ─▶ combat (durée du combat + 3 s
   le journal d'événements de **son** combat (message `battle`) pour le rejouer en 3D.
   Nombre impair de joueurs : le dernier affronte une **copie** d'un autre joueur.
 - **Dégâts** : base de l'étape + 1 par étoile des unités adverses survivantes.
+- **Étape 1 imperdable** : les créatures des rounds 1-2 à 1-4 (louveteaux, jeunes harpies)
+  sont battues par n'importe quel personnage à 1 ou 2 pièces seul (testé), et l'étape 1 ne
+  fait jamais perdre de PV.
+- **Orbes PvE** : à chaque round PvE, chaque joueur ouvre un orbe de même valeur : un
+  composant, de l'or (3 à l'étape 1, 5 ensuite) ou un champion (2, 3 puis 4 pièces) avec
+  1 or. Chaque joueur tire dans son propre sac de 4 orbes (2 composants, 1 or, 1 champion),
+  remélangé quand il est vide : sur 4 rounds PvE, tout le monde a reçu le même butin, seul
+  l'ordre change. Le butin du round est dans `lastLoot` (`item:<id>`, `gold:<n>`,
+  `unit:<id>`, `sold:<id>` si le banc était plein).
+- **Placement automatique** : au début du combat, les places libres du plateau (jusqu'au
+  niveau) sont remplies avec les meilleures unités du banc.
 - **Déconnexion** : un bot joue à la place du joueur jusqu'à son retour (60 s pour revenir
   dans la même partie).
 
@@ -172,6 +183,7 @@ Sans choix à la fin de la préparation, un augment est pris au hasard.
 - **Équilibrage** : `npm run augments -w @autochess/server -- 800` joue 800 parties entre
   bots qui prennent leurs augments au hasard et donne la place moyenne de chaque augment
   (4,5 = neutre ; cible entre 4,1 et 4,9 dans sa rareté).
+  État au 19 oct. 2026 (36 objets et orbes en place) : **les 40 augments dans la cible**.
 
 ## `packages/client`
 
@@ -247,8 +259,10 @@ Gilgamesh (solidité de son sort 35 → 30) et Marduk (bouclier 160 → 140).
 
 En place dans le serveur :
 
-- **Butin PvE normalisé** : chaque joueur reçoit le même nombre de composants à chaque
-  round PvE, qu'il gagne ou non ; seul le type varie.
+- **Butin PvE normalisé** : chaque joueur ouvre un orbe de même valeur à chaque round PvE,
+  qu'il gagne ou non, tiré dans son propre sac (2 composants, 1 or, 1 champion) : sur 4
+  rounds PvE, tout le monde a reçu exactement le même butin.
+- **Étape 1 sans perte de PV**, et créatures battables par n'importe quel personnage.
 - **Armurerie équitable** (l'équivalent du carrousel) : un choix par joueur, le plus bas
   en PV choisit en premier.
 - **Pool partagé** : acheter une unité la retire du pool de tout le monde ; on voit les
