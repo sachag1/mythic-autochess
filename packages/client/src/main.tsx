@@ -3,6 +3,7 @@ import { App } from "./App";
 import { tryReconnect } from "./net/store";
 import { Gallery } from "./scene/Gallery";
 import { Portraits } from "./scene/Portraits";
+import { Demo } from "./scene/Demo";
 import "./styles.css";
 import "./theme.css";
 
@@ -10,5 +11,6 @@ import "./theme.css";
 const params = new URLSearchParams(location.search);
 const gallery = params.has("gallery");
 const portraits = params.has("portraits");
-if (!gallery && !portraits) void tryReconnect();
-createRoot(document.getElementById("root")!).render(gallery ? <Gallery /> : portraits ? <Portraits /> : <App />);
+const demo = params.has("demo");
+if (!gallery && !portraits && !demo) void tryReconnect();
+createRoot(document.getElementById("root")!).render(gallery ? <Gallery /> : portraits ? <Portraits /> : demo ? <Demo /> : <App />);

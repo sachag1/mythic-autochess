@@ -39,6 +39,12 @@ export class VfxSystem {
   readonly smoke: ParticlePool;
   private readonly effects: Effect[] = [];
   private readonly decalPool = new Map<DecalKind, { mesh: THREE.Mesh; u: DecalUniforms; busy: boolean }[]>();
+  // Réserves d'objets réutilisés : créer un matériau à chaque effet obligerait à recompiler
+  // un shader (gel de l'image pendant les combats chargés).
+  private readonly boltMats: { core: THREE.MeshBasicNodeMaterial; halo: THREE.MeshBasicNodeMaterial; busy: boolean }[] = [];
+  private readonly pillars: { mesh: THREE.Mesh; progress: Node; tint: Node; scroll: Node; busy: boolean }[] = [];
+  private readonly bubbles: { mesh: THREE.Mesh; opacity: Node; tint: Node; busy: boolean }[] = [];
+  private readonly waves: { mesh: THREE.Mesh; progress: Node; busy: boolean }[] = [];
   private readonly lights: { light: THREE.PointLight; until: number; start: number; peak: number }[] = [];
   private shakeAmp = 0;
   private shakeUntil = 0;
@@ -61,6 +67,24 @@ export class VfxSystem {
       this.root.add(light);
       this.lights.push({ light, until: 0, start: 0, peak: 0 });
     }
+  }
+
+  /**
+   * Fait apparaître une fois chaque type d'effet hors de l'écran au démarrage : leurs
+   * shaders sont compilés pendant le chargement plutôt qu'au premier sort.
+   */
+  prewarm(): void {
+    const far = { x: 0, y: -60, z: 0 };
+    const c = new THREE.Color("#ffffff");
+    for (const kind of ["ring", "runes", "disc", "crack", "ripple", "star"] as DecalKind[]) this.decal(kind, far, { radius: 0.1, color: c, duration: 0.2, y: -60 });
+    for (let i = 0; i < 3; i++) {
+      this.pillar(far, { radius: 0.1, height: 0.1, color: c, duration: 0.2 });
+      this.lightning(far, { x: 0, y: -59, z: 0 }, { color: c, duration: 0.2, branches: 0 });
+    }
+    this.bubble(() => far, { radius: 0.1, color: c, duration: 0.2 });
+    this.shockwave(far, 0.1, 0.2);
+    this.burst(far, { count: 2, color: c });
+    this.dust(far, { count: 2, color: c });
   }
 
   setQuality(q: QualitySettings): void {
@@ -286,8 +310,20 @@ export class VfxSystem {
   /** Éclair zigzaguant de `a` à `b`, qui crépite pendant `duration` secondes. */
   lightning(a: Vec3, b: Vec3, o: { color: THREE.Color; duration?: number; width?: number; jag?: number; branches?: number }): void {
     const group = new THREE.Group();
-    const core = new THREE.MeshBasicNodeMaterial({ color: o.color.clone().multiplyScalar(6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-    const halo = new THREE.MeshBasicNodeMaterial({ color: o.color.clone().multiplyScalar(1.5), transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false });
+    let mats = this.boltMats.find((m) => !m.busy);
+    if (!mats) {
+      mats = {
+        core: new THREE.MeshBasicNodeMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+        halo: new THREE.MeshBasicNodeMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+        busy: false,
+      };
+      this.boltMats.push(mats);
+    }
+    const slot = mats;
+    slot.busy = true;
+    const { core, halo } = slot;
+    core.color.copy(o.color).multiplyScalar(6);
+    halo.color.copy(o.color).multiplyScalar(1.5);
     this.root.add(group);
     const width = o.width ?? 0.05;
     const build = () => {
@@ -326,8 +362,7 @@ export class VfxSystem {
       },
       dispose: () => {
         for (const c of group.children) (c as THREE.Mesh).geometry.dispose();
-        core.dispose();
-        halo.dispose();
+        slot.busy = false;
         this.root.remove(group);
       },
     });
@@ -335,82 +370,113 @@ export class VfxSystem {
 
   /** Colonne de lumière (rayon venu du ciel, pilier de soin…). */
   pillar(at: Vec3, o: { radius: number; height: number; color: THREE.Color; duration: number; intensity?: number; scroll?: number }): void {
-    const progress = uniform(0);
-    const tint = uniform(o.color.clone().multiplyScalar(o.intensity ?? 3));
-    const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
-    const v = uv().y;
-    const bands = sin(v.mul(18).sub(time.mul(o.scroll ?? 8))).mul(0.25).add(0.75);
-    material.colorNode = vec3(tint);
-    material.opacityNode = pow(oneMinus(v), 1.3).mul(bands).mul(progress);
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(o.radius, o.radius * 1.15, o.height, 24, 1, true), material);
-    mesh.position.set(at.x, o.height / 2, at.z);
-    this.root.add(mesh);
+    let p = this.pillars.find((x) => !x.busy);
+    if (!p) {
+      const progress = uniform(0);
+      const tint = uniform(new THREE.Color());
+      const scroll = uniform(8);
+      const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+      const v = uv().y;
+      const bands = sin(v.mul(18).sub(time.mul(scroll))).mul(0.25).add(0.75);
+      material.colorNode = vec3(tint);
+      material.opacityNode = pow(oneMinus(v), 1.3).mul(bands).mul(progress);
+      const geometry = new THREE.CylinderGeometry(1, 1.15, 1, 24, 1, true);
+      geometry.translate(0, 0.5, 0);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.visible = false;
+      this.root.add(mesh);
+      p = { mesh, progress, tint, scroll, busy: false };
+      this.pillars.push(p);
+    }
+    const slot = p;
+    slot.busy = true;
+    slot.mesh.visible = true;
+    slot.mesh.position.set(at.x, 0, at.z);
+    slot.tint.value.copy(o.color).multiplyScalar(o.intensity ?? 3);
+    slot.scroll.value = o.scroll ?? 8;
     this.during(o.duration, (k) => {
-      progress.value = Math.min(1, k * 6) * (k < 0.6 ? 1 : (1 - k) / 0.4);
-      mesh.scale.set(1 + k * 0.3, 1, 1 + k * 0.3);
+      slot.progress.value = Math.min(1, k * 6) * (k < 0.6 ? 1 : (1 - k) / 0.4);
+      const r = o.radius * (1 + k * 0.3);
+      slot.mesh.scale.set(r, o.height, r);
       if (k >= 1) {
-        this.root.remove(mesh);
-        mesh.geometry.dispose();
-        material.dispose();
+        slot.busy = false;
+        slot.mesh.visible = false;
       }
     });
   }
 
   /** Bulle de bouclier à reflets (Fresnel) qui suit `follow`. */
   bubble(follow: () => Vec3 | null, o: { radius: number; color: THREE.Color; duration: number }): Effect {
-    const opacity = uniform(0);
-    const tint = uniform(o.color.clone().multiplyScalar(2.2));
-    const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-    const fres = pow(oneMinus(abs(dot(normalView, positionViewDirection))), 2.2);
-    const shimmer = sin(positionLocal.y.mul(14).add(time.mul(4))).mul(0.15).add(0.85);
-    material.colorNode = vec3(tint);
-    material.opacityNode = fres.mul(shimmer).add(0.04).mul(opacity);
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(o.radius, 28, 18), material);
-    this.root.add(mesh);
+    let b = this.bubbles.find((x) => !x.busy);
+    if (!b) {
+      const opacity = uniform(0);
+      const tint = uniform(new THREE.Color());
+      const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+      const fres = pow(oneMinus(abs(dot(normalView, positionViewDirection))), 2.2);
+      const shimmer = sin(positionLocal.y.mul(14).add(time.mul(4))).mul(0.15).add(0.85);
+      material.colorNode = vec3(tint);
+      material.opacityNode = fres.mul(shimmer).add(0.04).mul(opacity);
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), material);
+      mesh.visible = false;
+      this.root.add(mesh);
+      b = { mesh, opacity, tint, busy: false };
+      this.bubbles.push(b);
+    }
+    const slot = b;
+    slot.busy = true;
+    slot.mesh.visible = true;
+    slot.tint.value.copy(o.color).multiplyScalar(2.2);
     const start = this.now;
     let done = false;
-    const effect: Effect = {
+    this.add({
       update: (now) => {
         const p = follow();
         const k = (now - start) / o.duration;
         if (!p || k >= 1 || done) return false;
-        mesh.position.set(p.x, p.y, p.z);
+        slot.mesh.position.set(p.x, p.y, p.z);
         const pop = Math.min(1, (now - start) / 0.15);
-        mesh.scale.setScalar(0.6 + 0.4 * pop);
-        opacity.value = pop * (k > 0.85 ? (1 - k) / 0.15 : 1);
+        slot.mesh.scale.setScalar(o.radius * (0.6 + 0.4 * pop));
+        slot.opacity.value = pop * (k > 0.85 ? (1 - k) / 0.15 : 1);
         return true;
       },
       dispose: () => {
-        this.root.remove(mesh);
-        mesh.geometry.dispose();
-        material.dispose();
+        slot.busy = false;
+        slot.mesh.visible = false;
       },
-    };
-    this.add(effect);
+    });
     return { update: () => true, dispose: () => (done = true) };
   }
 
   /** Onde de choc qui déforme l'image (qualité haute uniquement). */
   shockwave(at: Vec3, radius: number, duration = 0.5): void {
     if (!this.quality.distortion) return;
-    const progress = uniform(0);
-    const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
-    const p = uv().sub(0.5).mul(2);
-    const d = p.length();
-    const band = smoothstep(progress.sub(0.25), progress, d).mul(oneMinus(smoothstep(progress, progress.add(0.08), d)));
-    const offset = p.normalize().mul(band).mul(oneMinus(progress)).mul(0.03);
-    material.colorNode = viewportSharedTexture(screenUV.sub(vec2(offset.x, offset.y.negate()))).rgb;
-    material.opacityNode = band.mul(step(d, 1));
-    const mesh = new THREE.Mesh(planeGeometry, material);
-    mesh.position.set(at.x, 0.15, at.z);
-    mesh.scale.setScalar(radius);
-    mesh.renderOrder = 30;
-    this.root.add(mesh);
+    let w = this.waves.find((x) => !x.busy);
+    if (!w) {
+      const progress = uniform(0);
+      const material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
+      const p = uv().sub(0.5).mul(2);
+      const d = p.length();
+      const band = smoothstep(progress.sub(0.25), progress, d).mul(oneMinus(smoothstep(progress, progress.add(0.08), d)));
+      const offset = p.normalize().mul(band).mul(oneMinus(progress)).mul(0.03);
+      material.colorNode = viewportSharedTexture(screenUV.sub(vec2(offset.x, offset.y.negate()))).rgb;
+      material.opacityNode = band.mul(step(d, 1));
+      const mesh = new THREE.Mesh(planeGeometry, material);
+      mesh.renderOrder = 30;
+      mesh.visible = false;
+      this.root.add(mesh);
+      w = { mesh, progress, busy: false };
+      this.waves.push(w);
+    }
+    const slot = w;
+    slot.busy = true;
+    slot.mesh.visible = true;
+    slot.mesh.position.set(at.x, 0.15, at.z);
+    slot.mesh.scale.setScalar(radius);
     this.during(duration, (k) => {
-      progress.value = 0.1 + k * 0.95;
+      slot.progress.value = 0.1 + k * 0.95;
       if (k >= 1) {
-        this.root.remove(mesh);
-        material.dispose();
+        slot.busy = false;
+        slot.mesh.visible = false;
       }
     });
   }

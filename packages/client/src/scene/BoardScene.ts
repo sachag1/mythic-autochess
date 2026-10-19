@@ -3,12 +3,14 @@
 // effets de sorts, glisser-déposer et étiquettes HTML (étoiles, PV, mana, objets).
 import * as THREE from "three/webgpu";
 import { bloom } from "three/addons/tsl/display/BloomNode.js";
-import { hexDistance, HALF_ROWS, mirrorHex, type Team } from "@autochess/sim";
+import { hexDistance, HALF_ROWS, mirrorHex, MONSTERS, UNITS, type Team } from "@autochess/sim";
 import { itemStyle, unitDef } from "../data/content";
 import type { BattleReport, Location, PlayerSnap } from "../net/types";
 import { assets, CORE_ASSETS, namedNode } from "./assets";
 import { Arena } from "./arena";
 import { Character, type StunStyle } from "./characters/Character";
+import { MIXAMO_CHARACTERS } from "./characters/mixamo";
+import { specFor } from "./characters/catalog";
 import { BENCH_SIZE, benchToWorld, hexToWorld, nearestBenchSlot, nearestOwnHex, type Point } from "./layout";
 import { QUALITY_PRESETS, QualityGovernor, type QualityLevel, type QualitySettings } from "./quality";
 import { Replay, type ReplayFx, type ReplayUnit } from "./replay";
@@ -81,6 +83,12 @@ export class BoardScene {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(36, 1, 0.1, 400);
   private readonly cameraBase = new THREE.Vector3();
+  /** Caméra qui voit le calque 1 : précompilation des shaders des nouveaux modèles. */
+  private readonly compileCamera = (() => {
+    const c = new THREE.PerspectiveCamera(36, 1, 0.1, 400);
+    c.layers.enable(1);
+    return c;
+  })();
   private readonly lookAt = new THREE.Vector3(0, 0, 2.4);
   private readonly raycaster = new THREE.Raycaster();
   private readonly ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -109,6 +117,9 @@ export class BoardScene {
   private hovered: View | null = null;
   backend = "";
   private disposed = false;
+  private resolvePrewarm!: (p: Promise<void>) => void;
+  /** Résolu quand tous les corps ont été préchauffés. */
+  readonly prewarmed = new Promise<void>((r) => (this.resolvePrewarm = (p) => void p.then(r, r)));
 
   constructor(
     private readonly host: HTMLElement,
@@ -152,6 +163,7 @@ export class BoardScene {
       this.loaded = true;
       this.handlers.onLoading?.(1, true);
       this.syncPlanning();
+      this.resolvePrewarm(this.prewarmBodies());
     });
 
     void this.renderer.init().then(() => {
@@ -160,6 +172,7 @@ export class BoardScene {
       this.backend = backend.isWebGPUBackend ? "WebGPU" : "WebGL2";
       console.info(`[autochess] renderer: ${this.backend}, quality: ${this.quality.level}`);
       this.buildPipeline();
+      this.vfx.prewarm();
       this.handlers.onReady?.(this.backend);
       this.renderer.setAnimationLoop(this.frame);
     });
@@ -229,6 +242,8 @@ export class BoardScene {
     this.camera.lookAt(this.lookAt);
     this.camera.setViewOffset(this.width, this.height, this.width > 900 ? 40 : 0, this.height * 0.07, this.width, this.height);
     this.camera.updateProjectionMatrix();
+    this.compileCamera.copy(this.camera);
+    this.compileCamera.layers.enable(1);
   }
 
   // ---------------------------------------------------------------- données
@@ -318,6 +333,18 @@ export class BoardScene {
     char.root.userData.viewKey = key;
     char.setInCombat(Boolean(replay));
     this.scene.add(char.root);
+    // Shaders compilés en tâche de fond avant l'affichage du modèle (pas de gel de l'image).
+    // Le modèle est mis sur un calque invisible pour la caméra principale le temps de la compilation.
+    void char.ready.then(async () => {
+      if (this.disposed) return;
+      char.figure.traverse((o) => o.layers.set(1));
+      try {
+        await this.renderer.compileAsync(char.figure, this.compileCamera, this.scene);
+      } catch {
+        /* compilation à la volée au premier rendu */
+      }
+      char.figure.traverse((o) => o.layers.set(0));
+    });
     const label = createLabel(star, enemy);
     this.overlay.appendChild(label.root);
     label.bars.style.display = replay ? "" : "none";
@@ -334,6 +361,36 @@ export class BoardScene {
     if (this.hovered === v) {
       this.hovered = null;
       this.handlers.onHover(null);
+    }
+  }
+
+  /**
+   * Préchauffage en tâche de fond : un personnage par corps est chargé et ses shaders
+   * (normaux et de dissolution) compilés hors écran, pour éviter les gels au premier combat.
+   */
+  private async prewarmBodies(): Promise<void> {
+    const seen = new Set<string>();
+    const ids = [...UNITS, ...MONSTERS].map((u) => u.id);
+    for (const id of ids) {
+      if (this.disposed) return;
+      const key = bodyKey(id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      await new Promise((r) => setTimeout(r, 120));
+      const c = new Character(id, 1, "ally", null);
+      await c.ready;
+      if (this.disposed) return;
+      c.root.position.set(0, -40, 0);
+      c.root.traverse((o) => o.layers.set(1));
+      this.scene.add(c.root);
+      try {
+        await this.renderer.compileAsync(c.root, this.compileCamera, this.scene);
+        c.enableDissolve();
+        await this.renderer.compileAsync(c.root, this.compileCamera, this.scene);
+      } catch {
+        /* sans gravité : compilation au premier affichage */
+      }
+      c.dispose();
     }
   }
 
@@ -820,6 +877,12 @@ export class BoardScene {
     this.arena.highlightHex(location?.zone === "board" && location.row < HALF_ROWS ? location.col : null, location?.zone === "board" ? location.row : 0);
     this.arena.highlightBench(location?.zone === "bench" && location.index < BENCH_SIZE ? location.index : null);
   }
+}
+
+/** Corps utilisé par une unité (Mixamo si disponible, sinon catalogue) : clé de préchauffage. */
+function bodyKey(defId: string): string {
+  const mx = MIXAMO_CHARACTERS[defId];
+  return mx ? `mx:${mx.body}` : `kk:${specFor(defId).body}`;
 }
 
 function sameLocation(a: Location, b: Location): boolean {

@@ -117,8 +117,8 @@ export class Character {
     this.spec = specFor(defId);
     const def = unitDef(defId);
     const cost = def?.cost ?? 1;
-    this.scaleFactor = BODY_SCALE[this.spec.body] * (this.spec.scale ?? 1) * (0.92 + 0.05 * cost) * (star === 3 ? 1.22 : star === 2 ? 1.1 : 1);
-    this.height = 1.5 * (this.spec.scale ?? 1) * (0.92 + 0.05 * cost) * (star === 3 ? 1.22 : star === 2 ? 1.1 : 1);
+    this.scaleFactor = 1.2 * BODY_SCALE[this.spec.body] * (this.spec.scale ?? 1) * (0.92 + 0.05 * cost) * (star === 3 ? 1.22 : star === 2 ? 1.1 : 1);
+    this.height = 1.8 * (this.spec.scale ?? 1) * (0.92 + 0.05 * cost) * (star === 3 ? 1.22 : star === 2 ? 1.1 : 1);
     this.pantheonColor = new THREE.Color(PANTHEON_COLORS[originOf(def) ?? ""] ?? "#9a9aa8");
     this.fx = {
       flash: 0,
@@ -216,7 +216,7 @@ export class Character {
     for (const clip of mixamoClips(mx.body, model, anims)) this.clips.set(clip.name, clip);
 
     const def = unitDef(this.defId);
-    const target = 1.62 * (mx.scale ?? 1) * (0.94 + 0.04 * (def?.cost ?? 1)) * (this.star === 3 ? 1.2 : this.star === 2 ? 1.1 : 1);
+    const target = 1.95 * (mx.scale ?? 1) * (0.94 + 0.04 * (def?.cost ?? 1)) * (this.star === 3 ? 1.2 : this.star === 2 ? 1.1 : 1);
     this.height = target;
     const holder = new THREE.Group();
     holder.scale.setScalar(target / height);
@@ -279,7 +279,7 @@ export class Character {
       const acc = buildAccessory(a);
       acc.traverse((o) => {
         const m = o as THREE.Mesh;
-        if (m.isMesh) this.setMaterial(m, {});
+        if (m.isMesh) this.setAccessoryMaterial(m);
         if (o.userData.flap !== undefined || o.userData.sway || o.userData.spin) this.animated.push(o);
       });
       // Tête réelle ≈ 0,2 m pour 1,07 unité KayKit ; buste ≈ 0,45.
@@ -341,11 +341,33 @@ export class Character {
       const acc = buildAccessory(a);
       acc.traverse((o) => {
         const m = o as THREE.Mesh;
-        if (m.isMesh) this.setMaterial(m, {});
+        if (m.isMesh) this.setAccessoryMaterial(m);
         if (o.userData.flap !== undefined || o.userData.sway || o.userData.spin) this.animated.push(o);
       });
       bone.add(acc);
     }
+  }
+
+  /**
+   * Accessoires : leur couleur passe en teinte par objet et le matériau source est ramené à
+   * une version blanche par famille (métal, rugosité, lueur) : très peu de shaders différents.
+   */
+  private setAccessoryMaterial(m: THREE.Mesh): void {
+    const src = m.material as THREE.MeshStandardMaterial;
+    const key = `${src.metalness}|${src.roughness}|${src.transparent ? src.opacity : 1}|${src.side}|${src.emissiveIntensity > 0 ? 1 : 0}`;
+    let canonical = canonicalAccessory.get(key);
+    if (!canonical) {
+      canonical = src.clone();
+      canonical.color.set("#ffffff");
+      canonical.emissive.set("#000000");
+      canonical.emissiveIntensity = 0;
+      canonicalAccessory.set(key, canonical);
+    }
+    const glow = src.emissiveIntensity > 0 ? `#${src.color.clone().multiplyScalar(src.emissiveIntensity / 1.2).getHexString()}` : undefined;
+    m.material = canonical;
+    this.setMaterial(m, { tint: `#${src.color.getHexString()}`, glow });
+    // Une lueur > 1 dépasse ce qu'une couleur hexadécimale peut porter : on la garde telle quelle.
+    if (src.emissiveIntensity > 1) m.userData.glow = src.color.clone().multiplyScalar(src.emissiveIntensity);
   }
 
   /** Remplace le matériau d'un maillage par sa version à effets (partagée entre personnages). */
@@ -354,6 +376,9 @@ export class Character {
     const opts: MaterialOptions = { ...o, palette: o.recolor ? spec.palette : undefined, body: spec.body, matColors: spec.matColors, eyes: spec.eyes, ghost: spec.ghost };
     const src = m.material as THREE.Material | THREE.Material[];
     m.userData.fx = this.fx;
+    // Teinte et lueur propres à l'objet (uniformes par objet) : le matériau reste partagé.
+    m.userData.tint = o.tint ? new THREE.Color(o.tint) : WHITE;
+    m.userData.glow = o.glow ? new THREE.Color(o.glow).multiplyScalar(1.2) : BLACK;
     m.userData.fxSource = { src, opts };
     m.material = Array.isArray(src) ? src.map((x) => effectMaterial(x, opts)) : effectMaterial(src, opts);
     this.meshes.push(m);
@@ -499,7 +524,7 @@ export class Character {
   }
 
   /** Passe aux matériaux de dissolution (bruit par pixel coûteux : seulement à la mort). */
-  private enableDissolve(): void {
+  enableDissolve(): void {
     for (const m of this.meshes) {
       const { src, opts } = m.userData.fxSource as { src: THREE.Material | THREE.Material[]; opts: MaterialOptions };
       const o = { ...opts, dissolve: true };
@@ -707,6 +732,10 @@ interface MaterialOptions {
 
 const DEFAULT_FX: FxState = { flash: 0, stone: 0, stoneColor: new THREE.Color("#8d8a84"), dissolve: 0, rim: new THREE.Color("#000000"), rimStrength: 0 };
 const fxOf = (object: THREE.Object3D): FxState => (object.userData.fx as FxState | undefined) ?? DEFAULT_FX;
+const WHITE = new THREE.Color(1, 1, 1);
+/** Matériaux sources blancs des accessoires, par famille. */
+const canonicalAccessory = new Map<string, THREE.MeshStandardMaterial>();
+const BLACK = new THREE.Color(0, 0, 0);
 type Frame = { object: THREE.Object3D };
 
 /** Uniformes mis à jour pour chaque objet rendu, d'après object.userData.fx. */
@@ -717,6 +746,8 @@ const U = {
   dissolve: uniform(0).onObjectUpdate(({ object }: Frame) => fxOf(object).dissolve),
   rim: uniform(new THREE.Color()).onObjectUpdate(({ object }: Frame) => fxOf(object).rim),
   rimStrength: uniform(0).onObjectUpdate(({ object }: Frame) => fxOf(object).rimStrength),
+  tint: uniform(new THREE.Color(1, 1, 1)).onObjectUpdate(({ object }: Frame) => (object.userData.tint as THREE.Color | undefined) ?? WHITE),
+  glow: uniform(new THREE.Color(0, 0, 0)).onObjectUpdate(({ object }: Frame) => (object.userData.glow as THREE.Color | undefined) ?? BLACK),
 };
 
 const effectMaterials = new Map<string, THREE.Material>();
@@ -729,7 +760,7 @@ const effectMaterials = new Map<string, THREE.Material>();
 function effectMaterial(src: THREE.Material, o: MaterialOptions): THREE.Material {
   const s = src as THREE.MeshStandardMaterial;
   const named = o.matColors?.[s.name];
-  const key = [s.uuid, o.palette ? JSON.stringify(o.palette) : "", o.tint, o.glow, named, s.name === "Glow" ? o.eyes : "", o.ghost, o.dissolve, o.realistic].join("|");
+  const key = [s.uuid, o.palette ? JSON.stringify(o.palette) : "", named, s.name === "Glow" ? o.eyes : "", o.ghost, o.dissolve, o.realistic].join("|");
   const cached = effectMaterials.get(key);
   if (cached) return cached;
 
@@ -748,9 +779,8 @@ function effectMaterial(src: THREE.Material, o: MaterialOptions): THREE.Material
   if (map && o.palette && o.body) map = recolorAtlas(o.body, map, o.palette);
   const baseColor = new THREE.Color().copy(s.color ?? new THREE.Color("#ffffff"));
   if (named) baseColor.set(named);
-  if (o.tint) baseColor.multiply(new THREE.Color(o.tint));
   const colorU = uniform(baseColor);
-  const base: Node = map ? texture(map).rgb.mul(colorU) : vec3(colorU);
+  const base: Node = (map ? texture(map).rgb.mul(colorU) : vec3(colorU)).mul(U.tint);
   const luma = dot(base, vec3(0.299, 0.587, 0.114));
   out.colorNode = mix(base, U.stoneColor.mul(luma.mul(0.9).add(0.35)), U.stone);
   const fresnel = pow(oneMinus(abs(dot(normalView, positionViewDirection))), 3);
@@ -761,7 +791,7 @@ function effectMaterial(src: THREE.Material, o: MaterialOptions): THREE.Material
     // Avec une carte d'émission (yeux, runes lumineuses), seule la carte éclaire.
     emissive = emissive.add(s.emissiveMap ? texture(s.emissiveMap).rgb.mul(vec3(uniform(srcEmissive))) : vec3(uniform(srcEmissive)));
   }
-  if (o.glow) emissive = emissive.add(vec3(uniform(new THREE.Color(o.glow).multiplyScalar(1.2))));
+  emissive = emissive.add(U.glow);
   // Parties transparentes (cils, cheveux, voiles) : on garde l'alpha de la texture.
   const cutout = map && (s.transparent || s.alphaTest > 0);
   if (cutout && !o.dissolve) {

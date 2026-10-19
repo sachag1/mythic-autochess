@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { actions, useStore } from "../net/store";
+import { actions, getState, useStore } from "../net/store";
 import { BoardScene, type HoverInfo } from "../scene/BoardScene";
 import { ItemChip } from "./common";
 import { autoArrange, ItemBench, PlayersPanel, ShopBar, TopBar, TraitsPanel } from "./Hud";
@@ -53,6 +53,22 @@ export function GameView() {
   useEffect(() => {
     sceneRef.current?.setPlanning({ player: viewed, own, canEditBoard, canEditBench });
   }, [viewed, own, canEditBoard, canEditBench]);
+
+  // Comme dans TFT : juste avant le combat, s'il reste de la place sur le plateau et des
+  // unités sur le banc, on complète le plateau automatiquement (message « arrange »).
+  const autoFilled = useRef("");
+  useEffect(() => {
+    if (phase !== "planning" || !me?.alive) return;
+    const round = `${game.stage}-${game.round}`;
+    const id = setInterval(() => {
+      if (autoFilled.current === round || Date.now() < game.phaseEndsAt - 1500) return;
+      const latest = getState().game?.players[sessionId];
+      const layout = latest ? autoArrange(latest) : null;
+      autoFilled.current = round;
+      if (layout) actions.arrange(layout);
+    }, 200);
+    return () => clearInterval(id);
+  }, [phase, game.stage, game.round, game.phaseEndsAt, me?.alive, sessionId]);
 
   // Montée de niveau : bannière dorée.
   const myLevel = me?.level ?? null;

@@ -46,6 +46,8 @@ const C = (c: THREE.ColorRepresentation) => new THREE.Color(c);
 const up = (p: Vec3, dy: number): Vec3 => ({ x: p.x, y: p.y + dy, z: p.z });
 const mid = (a: Vec3, b: Vec3, k = 0.5): Vec3 => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k });
 const SKY = 9;
+const ROCK_GEO = new THREE.DodecahedronGeometry(0.35, 1);
+const ROCK_MAT = new THREE.MeshStandardMaterial({ color: "#7a6a58", roughness: 1, flatShading: true });
 
 // ---------------------------------------------------------------- briques composées
 
@@ -152,7 +154,7 @@ const R: Record<string, Recipe> = {
   "Boulder Toss": {
     impact: 900,
     play(ctx, g) {
-      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.35, 1), new THREE.MeshStandardMaterial({ color: "#7a6a58", roughness: 1, flatShading: true }));
+      const rock = new THREE.Mesh(ROCK_GEO, ROCK_MAT);
       rock.castShadow = true;
       const from = up(ctx.pos(g.caster)!, 2);
       ctx.vfx.after(0.3, () =>
