@@ -330,3 +330,70 @@ body,
     transform: translate(-50%, -70%) scale(1);
   }
 }
+
+/* Butin des rounds PvE. */
+.loot-popup {
+  position: absolute;
+  left: 50%;
+  bottom: 180px;
+  transform: translateX(-50%);
+  z-index: 25;
+  min-width: 260px;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, rgba(32, 33, 42, 0.95), rgba(17, 18, 24, 0.95));
+  border: 1px solid rgba(217, 178, 92, 0.55);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  animation: loot-in 0.35s ease-out, loot-out 0.4s ease-in 3.8s forwards;
+  pointer-events: none;
+}
+.loot-title {
+  font-family: var(--title-font);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #e8c878;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.loot-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.loot-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  opacity: 0;
+  animation: loot-item 0.35s ease-out forwards;
+}
+.loot-item small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.loot-item.gold {
+  color: #f0d48a;
+}
+@keyframes loot-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.9);
+  }
+}
+@keyframes loot-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+}
+@keyframes loot-item {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

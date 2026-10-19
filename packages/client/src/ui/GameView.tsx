@@ -3,7 +3,7 @@ import { actions, getState, useStore } from "../net/store";
 import { BoardScene, type HoverInfo } from "../scene/BoardScene";
 import { ItemChip } from "./common";
 import { autoArrange, ItemBench, PlayersPanel, ShopBar, TopBar, TraitsPanel } from "./Hud";
-import { Armory, AugmentPicker, BattleBanner, Eliminated, GameOver, OmenVote, ScoutPill, Toasts, UnitTooltip } from "./Overlays";
+import { LootPopup, Armory, AugmentPicker, BattleBanner, Eliminated, GameOver, OmenVote, ScoutPill, Toasts, UnitTooltip } from "./Overlays";
 
 /** Écran de jeu : plateau 3D plein écran et interface par-dessus. */
 export function GameView() {
@@ -23,6 +23,8 @@ export function GameView() {
   const [loading, setLoading] = useState<{ progress: number; done: boolean }>({ progress: 0, done: false });
   const [perf, setPerf] = useState("");
   const [levelUp, setLevelUp] = useState<number | null>(null);
+  const [loot, setLoot] = useState<string[] | null>(null);
+  const lootShown = useRef("");
   const lastLevel = useRef<number | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<BoardScene | null>(null);
@@ -69,6 +71,17 @@ export function GameView() {
     }, 200);
     return () => clearInterval(id);
   }, [phase, game.stage, game.round, game.phaseEndsAt, me?.alive, sessionId]);
+
+  // Butin PvE : à la fin du combat, les orbes s'ouvrent et le butin s'affiche.
+  const lootKey = me?.lastLoot?.length ? `${game.stage}-${game.round}|${me.lastLoot.join(",")}` : "";
+  useEffect(() => {
+    if (!lootKey || phase === "combat" || lootShown.current === lootKey) return;
+    lootShown.current = lootKey;
+    const entries = me?.lastLoot ?? [];
+    sceneRef.current?.openLoot(entries);
+    const id = setTimeout(() => setLoot(entries), 900);
+    return () => clearTimeout(id);
+  }, [lootKey, phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Montée de niveau : bannière dorée.
   const myLevel = me?.level ?? null;
@@ -167,6 +180,7 @@ export function GameView() {
           <ItemChip id={itemDrag.id} size={36} title={false} />
         </div>
       )}
+      {loot && <LootPopup loot={loot} onDone={() => setLoot(null)} />}
       {levelUp !== null && (
         <div key={levelUp} className="level-up" onAnimationEnd={() => setLevelUp(null)}>
           Niveau {levelUp}

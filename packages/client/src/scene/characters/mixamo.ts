@@ -91,6 +91,7 @@ export const MIXAMO_CHARACTERS: Record<string, MixamoSpec> = {
   marduk: { body: "guard", tint: "#4a6ad8", tintAmount: 0.3, acc: [{ kind: "hornedCap" }], props: [k("sword_1handed", "r"), k("shield_spikes", "l")], scale: 1.05, cast: "cast3" },
   gilgamesh: { body: "paladin", tint: "#e8c050", tintAmount: 0.4, hide: ["Paladin_J_Nordstrom"], acc: [{ kind: "crown" }], props: [q("sword_golden", "r", 0.36)], scale: 1.1, cast: "great_slash" },
   // Monstres PvE
+  harpy_chick: { body: "demoness", tint: "#b8a8c8", tintAmount: 0.45, acc: [{ kind: "wingsFeather", color: "#7a6a8a", color2: "#c8b8d8", scale: 0.6 }], scale: 0.68, cast: "magic_shot" },
   harpy: { body: "demoness", tint: "#8a7a9a", tintAmount: 0.4, acc: [{ kind: "wingsFeather", color: "#4a3a5a", color2: "#9a8aaa" }], cast: "magic_shot" },
   minotaur: { body: "orc", tint: "#7a4a2a", tintAmount: 0.35, acc: [{ kind: "hornsBull" }], props: [k("axe_2handed", "r")], scale: 1.2, brute: true, cast: "great_slash" },
 };

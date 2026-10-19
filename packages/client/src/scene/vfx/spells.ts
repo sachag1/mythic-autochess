@@ -915,6 +915,8 @@ const R: Record<string, Recipe> = {
   },
 
   // -------------------------------------------------------------- monstres PvE
+  Nip: { play: (ctx, g) => ctx.vfx.after(g.delay, () => { const p = at(ctx, g.center); if (p) slash(ctx, p, C("#ffd0b0"), 1, 0.3); }) },
+  Squawk: { play: (ctx, g) => { const c = ctx.pos(g.caster)!; ctx.vfx.decal("ring", c, { radius: 1.2, color: C("#d8c8ff"), duration: 0.4 }); } },
   Bite: { play: (ctx, g) => ctx.vfx.after(g.delay, () => { const p = at(ctx, g.center); if (p) slash(ctx, p, C("#ff6a5a"), 2, 0.5); }) },
   Shriek: { play: (ctx, g) => { const c = ctx.pos(g.caster)!; for (let i = 0; i < 3; i++) ctx.vfx.after(i * 0.1, () => ctx.vfx.decal("ring", c, { radius: 1.6 + i * 0.6, color: C("#c8a8ff"), duration: 0.5 })); } },
   Gore: { play: (ctx, g) => ctx.vfx.after(g.delay, () => { const p = at(ctx, g.center); if (p) impact(ctx, p, C("#c86a3a"), 1, { decal: "crack", shake: 0.15, dust: true }); }) },

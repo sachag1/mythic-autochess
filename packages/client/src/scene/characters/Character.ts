@@ -251,7 +251,7 @@ export class Character {
           const m = o as THREE.Mesh;
           if (!m.isMesh) return;
           m.castShadow = true;
-          this.setMaterial(m, { tint: p.tint, glow: p.glow, realistic: true });
+          this.setMaterial(m, { tint: p.tint, glow: p.glow, realistic: true, keepMetal: true });
         });
         attach(real.bone, real.object, 1);
         continue;
@@ -354,7 +354,7 @@ export class Character {
    */
   private setAccessoryMaterial(m: THREE.Mesh): void {
     const src = m.material as THREE.MeshStandardMaterial;
-    const key = `${src.metalness}|${src.roughness}|${src.transparent ? src.opacity : 1}|${src.side}|${src.emissiveIntensity > 0 ? 1 : 0}`;
+    const key = `${src.metalness}|${src.roughness}|${src.transparent ? src.opacity : 1}|${src.side}|${src.emissiveIntensity > 0 ? 1 : 0}|${src.map?.uuid}|${src.normalMap?.uuid}|${src.alphaTest}`;
     let canonical = canonicalAccessory.get(key);
     if (!canonical) {
       canonical = src.clone();
@@ -365,7 +365,8 @@ export class Character {
     }
     const glow = src.emissiveIntensity > 0 ? `#${src.color.clone().multiplyScalar(src.emissiveIntensity / 1.2).getHexString()}` : undefined;
     m.material = canonical;
-    this.setMaterial(m, { tint: `#${src.color.getHexString()}`, glow });
+    // « realistic » garde le relief et la rugosité des matières (métal, cuir, velours…).
+    this.setMaterial(m, { tint: `#${src.color.getHexString()}`, glow, realistic: true, keepMetal: true });
     // Une lueur > 1 dépasse ce qu'une couleur hexadécimale peut porter : on la garde telle quelle.
     if (src.emissiveIntensity > 1) m.userData.glow = src.color.clone().multiplyScalar(src.emissiveIntensity);
   }
@@ -720,6 +721,8 @@ interface MaterialOptions {
   recolor?: boolean;
   /** Matériau réaliste : garde normales, rugosité, transparence (cils, cheveux). */
   realistic?: boolean;
+  /** Garde la métallicité d'origine (accessoires en or, armes). */
+  keepMetal?: boolean;
   palette?: CharSpec["palette"];
   body?: BodyId;
   matColors?: Record<string, string>;
@@ -760,7 +763,7 @@ const effectMaterials = new Map<string, THREE.Material>();
 function effectMaterial(src: THREE.Material, o: MaterialOptions): THREE.Material {
   const s = src as THREE.MeshStandardMaterial;
   const named = o.matColors?.[s.name];
-  const key = [s.uuid, o.palette ? JSON.stringify(o.palette) : "", named, s.name === "Glow" ? o.eyes : "", o.ghost, o.dissolve, o.realistic].join("|");
+  const key = [s.uuid, o.palette ? JSON.stringify(o.palette) : "", named, s.name === "Glow" ? o.eyes : "", o.ghost, o.dissolve, o.realistic, o.keepMetal].join("|");
   const cached = effectMaterials.get(key);
   if (cached) return cached;
 
@@ -772,8 +775,8 @@ function effectMaterial(src: THREE.Material, o: MaterialOptions): THREE.Material
     out.metalnessMap = s.metalnessMap ?? null;
     out.aoMap = s.aoMap ?? null;
     // Les exports FBX donnent souvent une rugosité trop basse (aspect plastique).
-    out.roughness = s.roughnessMap ? 1 : Math.max(0.55, s.roughness ?? 0.7);
-    out.metalness = s.metalnessMap ? 1 : Math.min(s.metalness ?? 0, 0.3);
+    out.roughness = s.roughnessMap ? (o.keepMetal ? (s.roughness ?? 1) : 1) : Math.max(o.keepMetal ? 0.2 : 0.55, s.roughness ?? 0.7);
+    out.metalness = s.metalnessMap ? 1 : o.keepMetal ? (s.metalness ?? 0) : Math.min(s.metalness ?? 0, 0.3);
   }
   let map = s.map ?? null;
   if (map && o.palette && o.body) map = recolorAtlas(o.body, map, o.palette);

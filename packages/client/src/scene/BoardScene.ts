@@ -111,6 +111,8 @@ export class BoardScene {
   private battleBoards: { me: PlayerSnap | null; opponent: PlayerSnap | null } = { me: null, opponent: null };
   private lastFrame = performance.now();
   private loaded = false;
+  /** Orbes de butin lâchés par les monstres vaincus (rounds PvE), ouverts à la fin du combat. */
+  private readonly orbs: { group: THREE.Group; born: number; base: THREE.Vector3 }[] = [];
 
   private pointer = new THREE.Vector2();
   private drag: { view: View; from: Location } | null = null;
@@ -437,6 +439,7 @@ export class BoardScene {
       v.char.update(dt);
     }
     this.arena.update(dt, this.vfx);
+    this.updateOrbs(now);
     this.vfx.update();
 
     const s = this.vfx.shakeOffset();
@@ -677,11 +680,19 @@ export class BoardScene {
       if (!this.view(target)) return;
       const fromSource = type === "stun" && source ? STUN_STYLE_BY_SOURCE[source.defId] : undefined;
       const label = fromSource === "stone" ? "Pétrifié" : fromSource === "ice" ? "Gelé" : statusStyle(type).label || type;
+      if (type === "immunity") {
+        const v = this.view(target)!;
+        this.vfx.decal("runes", v.char.root.position, { radius: 1.4, color: new THREE.Color("#fff2c0"), duration: 0.8, spin: 2 });
+      }
       this.floatText(target, label, "stun");
     },
-    buff: (target) => {
+    buff: (target, _stat, amount) => {
       const v = this.view(target);
-      if (v) this.vfx.rise(v.char.root.position, { count: 6, color: new THREE.Color("#ffd76a"), radius: 0.4, speed: 2.2, size: 0.07 });
+      if (!v) return;
+      const p = v.char.root.position;
+      // Bonus : étincelles dorées qui montent ; malus (montant négatif) : voile violet qui retombe.
+      if (amount >= 0) this.vfx.rise(p, { count: 6, color: new THREE.Color("#ffd76a"), radius: 0.4, speed: 2.2, size: 0.07 });
+      else for (let i = 0; i < 8; i++) this.vfx.particle({ x: p.x + (Math.random() - 0.5) * 0.8, y: v.char.height, z: p.z + (Math.random() - 0.5) * 0.8, vy: -1.2, life: 0.8, size: 0.09, color: new THREE.Color("#9a5aff"), intensity: 2.5 });
     },
     death: (u) => {
       const v = this.view(u);
@@ -695,6 +706,7 @@ export class BoardScene {
       });
       v.shieldFx?.dispose();
       v.shieldFx = null;
+      if (this.battleReport?.opponentId === null && v.enemy && this.orbs.length < 4) this.dropOrb(q.x, q.z);
     },
     end: (winner: Team | null) => {
       const r = this.replay!;
@@ -710,6 +722,64 @@ export class BoardScene {
     },
     other: () => undefined,
   };
+
+  // ---------------------------------------------------------------- orbes de butin
+
+  private dropOrb(x: number, z: number): void {
+    const group = new THREE.Group();
+    const shell = new THREE.Mesh(ORB_GEO, ORB_MAT);
+    const core = new THREE.Mesh(ORB_CORE_GEO, ORB_CORE_MAT);
+    shell.castShadow = true;
+    group.add(shell, core);
+    group.position.set(x, 2.5, z);
+    this.scene.add(group);
+    this.orbs.push({ group, born: performance.now(), base: new THREE.Vector3(x, 0.75, z) });
+    this.vfx.burst({ x, y: 1.5, z }, { count: 16, color: new THREE.Color("#9ad0ff"), speed: 2, size: 0.1, intensity: 3 });
+  }
+
+  private updateOrbs(now: number): void {
+    for (const o of this.orbs) {
+      const age = (now - o.born) / 1000;
+      if (o.group.userData.flying) continue;
+      // Chute avec rebond, puis flottement.
+      const fall = Math.min(1, age / 0.6);
+      const bounce = fall < 1 ? (1 - fall) * 1.8 * Math.abs(Math.cos(fall * Math.PI * 1.5)) : 0;
+      o.group.position.y = o.base.y + bounce + Math.sin(age * 2.5) * 0.08 * fall;
+      o.group.rotation.y = age * 1.2;
+      if (Math.random() < 0.15) this.vfx.trail({ x: o.group.position.x, y: o.group.position.y, z: o.group.position.z }, new THREE.Color("#bfe0ff"), 0.12, 0.6, 2);
+    }
+  }
+
+  /**
+   * Ouvre le butin du dernier round PvE : les orbes (ou un orbe s'il n'y en a pas) filent
+   * vers le banc et éclatent aux couleurs du butin (or, objet, champion).
+   */
+  openLoot(loot: readonly string[]): void {
+    if (!this.orbs.length) this.dropOrb(0, -2);
+    const colors = loot.map((l) => (l.startsWith("gold:") ? "#ffd24a" : l.startsWith("unit:") || l.startsWith("sold:") ? "#c890ff" : "#7ab8ff"));
+    const target = new THREE.Vector3(0, 1.2, benchToWorld(4).z);
+    this.orbs.forEach((o, i) => {
+      o.group.userData.flying = true;
+      const from = o.group.position.clone();
+      const c = new THREE.Color(colors[i % Math.max(1, colors.length)] ?? "#7ab8ff");
+      this.vfx.after(i * 0.15, () =>
+        this.vfx.projectile({
+          from,
+          to: () => target,
+          duration: 0.7,
+          arc: 2.5,
+          mesh: o.group,
+          trail: (p) => this.vfx.trail(p, c, 0.2, 0.4, 3),
+          onArrive: (p) => {
+            this.vfx.burst(p, { count: 40, color: c, speed: 4, size: 0.14, intensity: 4, gravity: -2 });
+            this.vfx.decal("star", { x: p.x, y: 0, z: p.z }, { radius: 2, color: c, duration: 0.7 });
+            this.vfx.light(p, c, 30, 0.5);
+          },
+        }),
+      );
+    });
+    this.orbs.length = 0;
+  }
 
   private floatText(unit: ReplayUnit, text: string, cls: string): void {
     const v = this.views.get(`b:${unit.id}`);
@@ -884,6 +954,11 @@ function bodyKey(defId: string): string {
   const mx = MIXAMO_CHARACTERS[defId];
   return mx ? `mx:${mx.body}` : `kk:${specFor(defId).body}`;
 }
+
+const ORB_GEO = new THREE.SphereGeometry(0.32, 32, 16);
+const ORB_MAT = new THREE.MeshPhysicalMaterial({ color: "#cfe6ff", metalness: 0, roughness: 0.05, transmission: 0.6, thickness: 0.4, transparent: true, opacity: 0.85, emissive: new THREE.Color("#3a7aff"), emissiveIntensity: 0.6 });
+const ORB_CORE_GEO = new THREE.IcosahedronGeometry(0.13, 1);
+const ORB_CORE_MAT = new THREE.MeshStandardMaterial({ color: "#ffffff", emissive: new THREE.Color("#bfe0ff"), emissiveIntensity: 3 });
 
 function sameLocation(a: Location, b: Location): boolean {
   if (a.zone === "bench" && b.zone === "bench") return a.index === b.index;

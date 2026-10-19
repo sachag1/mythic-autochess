@@ -27,6 +27,8 @@ export const STATUS_STYLES: Record<string, StatusStyle> = {
   silence: { label: "Silence", color: "#b0a0ff", particles: "spiral", rate: 10 },
   slow: { label: "Ralenti", color: "#6a8aff", particles: "smoke", rate: 6 },
   shred: { label: "Armure brisée", color: "#c8a070", particles: "sparks", rate: 6 },
+  sunder: { label: "Armure brisée", color: "#d89a5a", particles: "sparks", rate: 8 },
+  immunity: { label: "Inébranlable", color: "#fff2c0", particles: "spiral", rate: 10 },
   taunt: { label: "Provocation", color: "#ff4a4a", particles: "spiral", rate: 8 },
 };
 

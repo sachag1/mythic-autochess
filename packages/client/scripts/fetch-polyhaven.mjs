@@ -16,7 +16,14 @@ const TEXTURES = {
   monastery_stone_floor: "floor",
   coast_sand_01: "sand",
   granite_tile: "granite",
+  // Accessoires des personnages (couronnes, fourrures, coiffes…), en 512 px.
+  metal_plate: "metal",
+  brown_leather: "leather",
+  velour_velvet: "velvet",
+  rough_linen: "linen",
+  wool_boucle: "wool",
 };
+const SMALL = new Set(["metal", "leather", "velvet", "linen", "wool"]);
 /** Ciels : lumière (HDR 1k) + fond (JPG retouché, réduit). */
 const SKIES = { kloofendal_48d_partly_cloudy_puresky: "day", belfast_sunset_puresky: "sunset" };
 
@@ -48,7 +55,8 @@ for (const [id, name] of Object.entries(TEXTURES)) {
     const img = await get(url);
     const out = join(OUT, "pbr", `${name}_${kind}.webp`);
     // Normales et ARM sans perte de précision visible ; couleur un peu plus compressée.
-    await sharp(img).resize(1024, 1024).webp({ quality: kind === "diff" ? 82 : 90 }).toFile(out);
+    const size = SMALL.has(name) ? 512 : 1024;
+    await sharp(img).resize(size, size).webp({ quality: kind === "diff" ? 82 : 90 }).toFile(out);
     console.log(`pbr/${name}_${kind}.webp`);
   }
 }

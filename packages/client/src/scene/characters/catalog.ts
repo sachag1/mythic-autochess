@@ -294,6 +294,11 @@ export const CHARACTERS: Record<string, CharSpec> = {
   },
 
   // ================================================================ Monstres (rounds PvE)
+  wolf_pup: { body: "wolf", matColors: { Main: "#9a8e80", Main_Light: "#d8ccbc" }, scale: 0.62, attack: "bite" },
+  harpy_chick: {
+    body: "rogue_hooded", palette: { primary: "#8a7a9a", secondary: "#b8a8c8", skin: "#d8c0b0", leather: "#5a4a5a" }, scale: 0.7,
+    acc: [{ kind: "wingsFeather", color: "#7a6a8a", color2: "#c8b8d8", scale: 0.6 }, { kind: "beak", color: "#e8c04a", scale: 0.7 }], attack: "magic", cast: "Spellcast_Shoot",
+  },
   wolf: { body: "wolf", matColors: { Main: "#6a6058", Main_Light: "#a89a8a" }, attack: "bite" },
   harpy: {
     body: "rogue_hooded", palette: { primary: "#5a4a6a", secondary: "#8a7a9a", skin: "#c8b0a0", leather: "#3a2a3a" },

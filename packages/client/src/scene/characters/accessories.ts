@@ -4,6 +4,7 @@
 // vers +z à 0,53) ou de l'os « chest » pour le dos (dos vers −z à 0,4). Une instance peut
 // être déplacée, tournée et mise à l'échelle (animaux).
 import * as THREE from "three/webgpu";
+import { featherTexture, withSurface, type Surface } from "./surfaces";
 
 export interface AccessoryDef {
   kind: AccessoryKind;
@@ -75,11 +76,25 @@ function mirrorPair(make: (side: 1 | -1) => THREE.Object3D): THREE.Group {
   return group(make(1), make(-1));
 }
 
+/** Plume : plan texturé (rachis et barbes, bords transparents), légèrement incurvé. */
 function feather(length: number, width: number, m: THREE.Material): THREE.Mesh {
-  const g = new THREE.SphereGeometry(1, 10, 6);
-  g.scale(width, length, width * 0.25);
+  const g = new THREE.PlaneGeometry(width * 2.6, length * 2, 2, 6);
+  const pos = g.attributes.position!;
+  for (let i = 0; i < pos.count; i++) pos.setZ(i, -Math.pow(pos.getX(i) / (width * 1.3), 2) * width * 0.25);
+  g.computeVertexNormals();
   g.translate(0, length, 0);
-  return mesh(g, m);
+  return mesh(g, featherMaterial(m as THREE.MeshStandardMaterial));
+}
+
+const featherMats = new Map<string, THREE.MeshStandardMaterial>();
+function featherMaterial(base: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  const key = base.color.getHexString();
+  let m = featherMats.get(key);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({ color: base.color, map: featherTexture(), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.75 });
+    featherMats.set(key, m);
+  }
+  return m;
 }
 
 /** Aile de plumes : rangées de plumes en éventail, de la verticale vers l'horizontale, côté `side` (+x ou −x). */
@@ -652,8 +667,29 @@ export function buildAccessory(a: AccessoryDef): THREE.Object3D {
       break;
     }
   }
+  applySurfaces(o, a.kind);
   if (a.pos) o.position.add(new THREE.Vector3(...a.pos));
   if (a.rot) o.rotation.set(o.rotation.x + a.rot[0], o.rotation.y + a.rot[1], o.rotation.z + a.rot[2]);
   if (a.scale) o.scale.multiplyScalar(a.scale);
   return o;
+}
+
+/** Matière par défaut de chaque accessoire (le métal et les parties lumineuses sont détectés). */
+const SURFACE_BY_KIND: Partial<Record<AccessoryKind, Surface>> = {
+  hornsBull: "bone", hornsRam: "bone", hornsDemon: "bone", antlers: "bone", beak: "bone", plate: "bone", shell: "bone", scorpionTail: "bone", eyeBig: "plain",
+  earsCat: "fur", earsJackal: "fur", earsSet: "fur", earsPig: "leather", earsRound: "fur", lionMane: "fur", furHood: "fur", beard: "fur", tails: "fur", monkeyTail: "fur", jaguarHelm: "fur",
+  snoutCroc: "leather", snoutJackal: "fur", snoutPig: "leather", snoutLong: "leather", snakeHair: "leather", wingsBat: "leather",
+  nemes: "linen", veil: "linen", qingHat: "velvet", plumeCrest: "velvet", drumRing: "leather", hairBun: "fur", cauldron: "metal",
+};
+
+function applySurfaces(o: THREE.Object3D, kind: AccessoryKind): void {
+  o.traverse((child) => {
+    const m = child as THREE.Mesh;
+    if (!m.isMesh) return;
+    const mat = m.material as THREE.MeshStandardMaterial;
+    if (mat.map) return; // plumes déjà texturées
+    const glowing = mat.emissiveIntensity > 0 && mat.emissive.getHex() !== 0;
+    const surface: Surface = glowing ? "plain" : mat.metalness > 0.5 ? "metal" : (SURFACE_BY_KIND[kind] ?? "plain");
+    m.material = withSurface(mat, surface);
+  });
 }
