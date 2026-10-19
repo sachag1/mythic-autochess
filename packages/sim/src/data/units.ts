@@ -103,7 +103,7 @@ export const UNITS: readonly UnitDef[] = [
     target: "currentTarget",
     castTimeMs: 400,
     effects: [
-      { kind: "damage", damageType: "physical", amount: adRatio(2.9), scaling: "ad", area: { shape: "single" } },
+      { kind: "damage", damageType: "physical", amount: adRatio(3.1), scaling: "ad", area: { shape: "single" } },
       { kind: "buff", stat: "attackSpeedPct", amount: [20, 25, 35], durationMs: 4000, area: { shape: "self" } },
     ],
   }),
@@ -426,7 +426,7 @@ export const UNITS: readonly UnitDef[] = [
     target: "currentTarget",
     castTimeMs: 600,
     effects: [
-      { kind: "damage", damageType: "magic", amount: abilityValues(4, 112), scaling: "ap", area: { shape: "radius", radius: 1 } },
+      { kind: "damage", damageType: "magic", amount: abilityValues(4, 106), scaling: "ap", area: { shape: "radius", radius: 1 } },
       { kind: "stun", durationMs: durationValues(1250), area: { shape: "single" } },
     ],
   }),
@@ -486,8 +486,8 @@ export const UNITS: readonly UnitDef[] = [
     target: "self",
     castTimeMs: 800,
     effects: [
-      { kind: "damage", damageType: "magic", amount: abilityValues(5, 66), scaling: "ap", area: { shape: "all" } },
-      { kind: "heal", amount: abilityValues(5, 60), scaling: "ap", area: { shape: "all" } },
+      { kind: "damage", damageType: "magic", amount: abilityValues(5, 60), scaling: "ap", area: { shape: "all" } },
+      { kind: "heal", amount: abilityValues(5, 50), scaling: "ap", area: { shape: "all" } },
     ],
   }),
   unit("wukong", "Sun Wukong", 5, ["chinese", "trickster"], "assassin", {

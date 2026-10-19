@@ -52,8 +52,8 @@ export const TRAITS: readonly TraitDef[] = [
         count: 6,
         scope: "members",
         triggers: [{ on: "onAllyDeath", target: "self", effects: [
-          { kind: "buff", stat: "attackDamage", amount: flat(50), area: { shape: "self" } },
-          { kind: "buff", stat: "attackSpeedPct", amount: flat(50), area: { shape: "self" } },
+          { kind: "buff", stat: "attackDamage", amount: flat(33), area: { shape: "self" } },
+          { kind: "buff", stat: "attackSpeedPct", amount: flat(33), area: { shape: "self" } },
         ] }],
       },
     ],
@@ -77,7 +77,7 @@ export const TRAITS: readonly TraitDef[] = [
     breakpoints: [
       { count: 2, scope: "members", stats: { startMana: 30 } },
       { count: 4, scope: "members", stats: { startMana: 55 }, triggers: [{ on: "everyNAttacks", n: 1, target: "self", effects: [{ kind: "mana", amount: flat(6), area: { shape: "self" } }] }] },
-      { count: 6, scope: "members", stats: { startMana: 90 }, triggers: [{ on: "everyNAttacks", n: 1, target: "self", effects: [{ kind: "mana", amount: flat(9), area: { shape: "self" } }] }] },
+      { count: 6, scope: "members", stats: { startMana: 72 }, triggers: [{ on: "everyNAttacks", n: 1, target: "self", effects: [{ kind: "mana", amount: flat(6), area: { shape: "self" } }] }] },
     ],
   },
   {
@@ -88,7 +88,7 @@ export const TRAITS: readonly TraitDef[] = [
     breakpoints: [
       { count: 2, scope: "team", stats: { omnivamp: 8 } },
       { count: 4, scope: "team", stats: { omnivamp: 22 } },
-      { count: 6, scope: "team", stats: { omnivamp: 30 } },
+      { count: 6, scope: "team", stats: { omnivamp: 36 } },
     ],
   },
   {
@@ -178,7 +178,7 @@ export const TRAITS: readonly TraitDef[] = [
     breakpoints: [
       { count: 2, scope: "members", stats: { abilityPower: 25 } },
       { count: 4, scope: "members", stats: { abilityPower: 42 } },
-      { count: 6, scope: "members", stats: { abilityPower: 110 } },
+      { count: 6, scope: "members", stats: { abilityPower: 58 } },
     ],
   },
   {
@@ -200,7 +200,7 @@ export const TRAITS: readonly TraitDef[] = [
     breakpoints: [
       { count: 2, scope: "members", triggers: [{ on: "interval", everyMs: 5000, target: "lowestHpAlly", effects: [{ kind: "shield", amount: flat(70), scaling: "ap", durationMs: 4000, area: { shape: "single" } }] }] },
       { count: 4, scope: "members", triggers: [{ on: "interval", everyMs: 5000, target: "lowestHpAlly", effects: [{ kind: "shield", amount: flat(130), scaling: "ap", durationMs: 4000, area: { shape: "single" } }] }] },
-      { count: 6, scope: "members", triggers: [{ on: "interval", everyMs: 5000, target: "lowestHpAlly", effects: [{ kind: "shield", amount: flat(320), scaling: "ap", durationMs: 4000, area: { shape: "single" } }] }] },
+      { count: 6, scope: "members", triggers: [{ on: "interval", everyMs: 5000, target: "lowestHpAlly", effects: [{ kind: "shield", amount: flat(200), scaling: "ap", durationMs: 4000, area: { shape: "single" } }] }] },
     ],
   },
 ];

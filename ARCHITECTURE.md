@@ -248,12 +248,12 @@ plutôt que sur la chance.
    - chaque objet complet : entre 42 et 58 % de victoires pour les équipes qui le portent.
 4. On corrige d'abord le gabarit si tout un rôle est décalé, puis les sorts un par un.
 
-État au 19 oct. 2026 avec les 36 objets (tournoi de 1 500 équipes,
-`TEAMS=300 GAMES=30 npm run comps`, moyenne de 6 tirages d'objets) : archétypes entre 44
-et 55 %, 55 unités sur 56 dans la cible (Ra à 59–60 %), tous les paliers de synergie dans
-la cible sauf Oracle 6 (65 %, peu joué), **36 objets entre 47 et 56 %**. Ajustements
-faits avec les objets : Kami 6 (mana par attaque 12 → 9), Ziggurat 6 (65 → 58),
-Gilgamesh (solidité de son sort 35 → 30) et Marduk (bouclier 160 → 140).
+État au 19 oct. 2026 (tournoi de 2 500 équipes, `TEAMS=500 GAMES=30 npm run comps`) :
+archétypes entre 44 et 54 %, **les 56 unités dans la cible**, **36 objets entre 47 et
+56 %**, compos de 3 à 7 synergies actives entre 49 et 51 %, tous les paliers de synergie
+dans la cible sauf Einherjar 6 (62 %, sur 27 équipes seulement : dans la marge d'erreur).
+Un grand échantillon est nécessaire pour juger les paliers à 6, rares : avec 1 500 équipes,
+ils sont trop peu joués pour être mesurés.
 
 ## Équité : limiter la frustration liée à la chance
 
