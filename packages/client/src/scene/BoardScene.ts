@@ -78,6 +78,8 @@ interface View {
   shieldFx: { dispose(): void } | null;
 }
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export class BoardScene {
   readonly renderer: THREE.WebGPURenderer;
   private readonly scene = new THREE.Scene();
@@ -118,10 +120,9 @@ export class BoardScene {
   private drag: { view: View; from: Location } | null = null;
   private hovered: View | null = null;
   backend = "";
+  /** Avancement du préchauffage (débogage). */
+  prewarmStatus = "";
   private disposed = false;
-  private resolvePrewarm!: (p: Promise<void>) => void;
-  /** Résolu quand tous les corps ont été préchauffés. */
-  readonly prewarmed = new Promise<void>((r) => (this.resolvePrewarm = (p) => void p.then(r, r)));
 
   constructor(
     private readonly host: HTMLElement,
@@ -165,7 +166,7 @@ export class BoardScene {
       this.loaded = true;
       this.handlers.onLoading?.(1, true);
       this.syncPlanning();
-      this.resolvePrewarm(this.prewarmBodies());
+      void this.prewarmBodies();
     });
 
     void this.renderer.init().then(() => {
@@ -341,7 +342,8 @@ export class BoardScene {
       if (this.disposed) return;
       char.figure.traverse((o) => o.layers.set(1));
       try {
-        await this.renderer.compileAsync(char.figure, this.compileCamera, this.scene);
+        // Au plus 1,5 s invisible : sur un GPU lent, mieux vaut un à-coup qu'une unité absente.
+        await Promise.race([this.renderer.compileAsync(char.figure, this.compileCamera, this.scene), sleep(1500)]);
       } catch {
         /* compilation à la volée au premier rendu */
       }
@@ -369,31 +371,55 @@ export class BoardScene {
   /**
    * Préchauffage en tâche de fond : un personnage par corps est chargé et ses shaders
    * (normaux et de dissolution) compilés hors écran, pour éviter les gels au premier combat.
+   * Le préchauffage général est espacé et suspendu pendant les combats : il ne doit pas faire
+   * chuter les images par seconde ; les corps utiles tout de suite passent par `prewarmUnits`.
    */
   private async prewarmBodies(): Promise<void> {
-    const seen = new Set<string>();
-    const ids = [...UNITS, ...MONSTERS].map((u) => u.id);
-    for (const id of ids) {
-      if (this.disposed) return;
-      const key = bodyKey(id);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      await new Promise((r) => setTimeout(r, 120));
-      const c = new Character(id, 1, "ally", null);
-      await c.ready;
-      if (this.disposed) return;
-      c.root.position.set(0, -40, 0);
-      c.root.traverse((o) => o.layers.set(1));
-      this.scene.add(c.root);
-      try {
-        await this.renderer.compileAsync(c.root, this.compileCamera, this.scene);
-        c.enableDissolve();
-        await this.renderer.compileAsync(c.root, this.compileCamera, this.scene);
-      } catch {
-        /* sans gravité : compilation au premier affichage */
+    await sleep(4000);
+    await this.prewarmUnits([...UNITS, ...MONSTERS].map((u) => u.id), 1500);
+  }
+
+  private readonly prewarmedBodies = new Set<string>();
+
+  /** Préchauffe les corps de ces unités (déjà faits : ignorés). `gapMs` : pause entre deux corps. */
+  prewarmUnits(ids: readonly string[], gapMs = 0): Promise<void> {
+    const run = async () => {
+      for (const id of ids) {
+        if (this.disposed) return;
+        const key = bodyKey(id);
+        if (this.prewarmedBodies.has(key)) continue;
+        if (gapMs) {
+          await sleep(gapMs);
+          while (this.replay && !this.replay.ended && !this.disposed) await sleep(1000);
+          if (this.prewarmedBodies.has(key) || this.disposed) continue;
+        }
+        this.prewarmedBodies.add(key);
+        const c = new Character(id, 1, "ally", null);
+        this.prewarmStatus = `${this.prewarmedBodies.size} corps · ${id}`;
+        await c.ready;
+        if (this.disposed) return;
+        c.root.position.set(0, -40, 0);
+        c.root.traverse((o) => o.layers.set(1));
+        this.scene.add(c.root);
+        // Délai maximal : une compilation qui traîne ne doit pas bloquer la file.
+        const capped = (p: Promise<unknown>) => Promise.race([p, sleep(4000)]);
+        try {
+          await capped(this.renderer.compileAsync(c.root, this.compileCamera, this.scene));
+          c.enableDissolve();
+          await capped(this.renderer.compileAsync(c.root, this.compileCamera, this.scene));
+        } catch {
+          /* sans gravité : compilation au premier affichage */
+        }
+        // Les shaders restent en cache, mais les textures de ce corps quittent la mémoire
+        // graphique s'il n'est pas affiché : tous les corps résidents saturent un GPU intégré.
+        const live = new Set<THREE.Texture>();
+        for (const v of this.views.values()) for (const t of v.char.textures()) live.add(t);
+        for (const t of c.textures()) if (!live.has(t) && !t.userData.keep) t.dispose();
+        c.dispose();
       }
-      c.dispose();
-    }
+    };
+    // Tourne en parallèle du préchauffage général : ces corps-là n'attendent pas leur tour.
+    return run();
   }
 
   // ---------------------------------------------------------------- effets d'interface

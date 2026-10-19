@@ -56,7 +56,7 @@ export function Demo() {
     };
     let start = 0;
     setInfo("Préchauffage des modèles…");
-    void scene.prewarmed.then(() => (start = window.setTimeout(fight, 500)));
+    void scene.prewarmUnits([...a.split(","), ...b.split(",")]).then(() => (start = window.setTimeout(fight, 500)));
     const perf = window.setInterval(() => setInfo((s) => s.replace(/ · \d+ i\/s.*$/, "") + ` · ${Math.round(scene.fps)} i/s (${scene.qualityLevel})`), 1000);
     return () => {
       clearTimeout(start);

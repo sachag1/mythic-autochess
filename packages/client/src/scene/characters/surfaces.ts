@@ -28,6 +28,8 @@ function tex(name: string, kind: "nor" | "arm", repeat: number): THREE.Texture {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(repeat, repeat);
     t.anisotropy = 4;
+    // Partagée par tous les accessoires : jamais libérée par le préchauffage.
+    t.userData.keep = true;
     textures.set(key, t);
   }
   return t;
@@ -90,5 +92,6 @@ export function featherTexture(): THREE.CanvasTexture {
   featherMap = new THREE.CanvasTexture(canvas);
   featherMap.colorSpace = THREE.SRGBColorSpace;
   featherMap.anisotropy = 4;
+  featherMap.userData.keep = true;
   return featherMap;
 }

@@ -703,6 +703,18 @@ export class Character {
     return new THREE.Vector3(this.root.position.x, this.root.position.y + this.figure.position.y + this.height * 0.55, this.root.position.z);
   }
 
+  /** Textures des matériaux d'origine du personnage (corps, accessoires, objets tenus). */
+  textures(): Set<THREE.Texture> {
+    const out = new Set<THREE.Texture>();
+    for (const m of this.meshes) {
+      const src = (m.userData.fxSource as { src: THREE.Material | THREE.Material[] } | undefined)?.src;
+      for (const mat of Array.isArray(src) ? src : src ? [src] : []) {
+        for (const v of Object.values(mat)) if ((v as THREE.Texture | null)?.isTexture) out.add(v as THREE.Texture);
+      }
+    }
+    return out;
+  }
+
   dispose(): void {
     this.disposed = true;
     for (const m of this.mixers) m.stopAllAction();
@@ -827,6 +839,16 @@ const smoothed = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
  * Les créatures Quaternius sont en facettes (normales par face) : on fusionne les sommets
  * et on recalcule des normales lissées pour un rendu plus naturel sous l'éclairage HDRI.
  */
+/** Copie non entrelacée d'un attribut (même type de tableau, sans le journal de `clone()`). */
+function deinterleave(a: THREE.InterleavedBufferAttribute): THREE.BufferAttribute {
+  const src = a.data.array as unknown as ArrayLike<number> & { constructor: new (n: number) => THREE.TypedArray };
+  const out = new src.constructor(a.count * a.itemSize);
+  for (let i = 0; i < a.count; i++) {
+    for (let k = 0; k < a.itemSize; k++) out[i * a.itemSize + k] = src[i * a.data.stride + a.offset + k]!;
+  }
+  return new THREE.BufferAttribute(out, a.itemSize, a.normalized);
+}
+
 function smoothCreature(model: THREE.Object3D): void {
   model.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -838,7 +860,7 @@ function smoothCreature(model: THREE.Object3D): void {
       for (const [name, attr] of Object.entries(m.geometry.attributes)) {
         if (name === "normal") continue;
         const a = attr as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
-        src.setAttribute(name, (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute ? (a as THREE.InterleavedBufferAttribute).clone() : a.clone());
+        src.setAttribute(name, (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute ? deinterleave(a as THREE.InterleavedBufferAttribute) : a.clone());
       }
       if (m.geometry.index) src.setIndex(m.geometry.index.clone());
       for (const g of m.geometry.groups) src.addGroup(g.start, g.count, g.materialIndex);
@@ -874,6 +896,8 @@ function mixamoClips(body: string, model: THREE.Object3D, anims: { scene: THREE.
     for (const track of clip.tracks) {
       const [node, prop] = [track.name.slice(0, track.name.lastIndexOf(".")), track.name.slice(track.name.lastIndexOf(".") + 1)];
       const name = node.replace(/^mixamorig\d*:?/, "mixamorig");
+      // Certains corps n'ont pas tous les doigts : pas de piste vers un os absent.
+      if (!model.getObjectByName(name)) continue;
       if (prop === "quaternion") {
         const t = track.clone();
         t.name = `${name}.quaternion`;

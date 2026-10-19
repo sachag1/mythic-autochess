@@ -1,3 +1,4 @@
+import { MONSTERS } from "@autochess/sim";
 import { useEffect, useRef, useState } from "react";
 import { actions, getState, useStore } from "../net/store";
 import { BoardScene, type HoverInfo } from "../scene/BoardScene";
@@ -71,6 +72,21 @@ export function GameView() {
     }, 200);
     return () => clearInterval(id);
   }, [phase, game.stage, game.round, game.phaseEndsAt, me?.alive, sessionId]);
+
+  // Préchauffage prioritaire des corps visibles bientôt : plateaux et bancs de tous les
+  // joueurs, boutique, monstres PvE (le reste se fait lentement en tâche de fond).
+  const warmIds = [
+    ...new Set([
+      ...Object.values(game.players).flatMap((p) => [...Object.values(p.board), ...Object.values(p.bench)].map((u) => u.defId)),
+      ...(me?.shop ?? []).filter(Boolean),
+      ...MONSTERS.map((m) => m.id),
+    ]),
+  ]
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (phase !== "combat") void sceneRef.current?.prewarmUnits(warmIds.split(",").filter(Boolean));
+  }, [warmIds, phase]);
 
   // Butin PvE : à la fin du combat, les orbes s'ouvrent et le butin s'affiche.
   const lootKey = me?.lastLoot?.length ? `${game.stage}-${game.round}|${me.lastLoot.join(",")}` : "";
