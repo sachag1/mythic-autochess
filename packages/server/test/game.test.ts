@@ -166,6 +166,48 @@ describe("shop and economy", () => {
   });
 });
 
+describe("auto-fill", () => {
+  it("moves the best bench units onto empty board slots when combat starts", () => {
+    const game = newGame(2, 11);
+    toPlanning(game);
+    const p = player(game);
+    p.gold = 100;
+    p.bench.fill(null);
+    p.board.clear();
+    p.level = 2;
+    for (const defId of ["medusa", "valkyrie", "zeus"]) {
+      stockShop(game, p, 0, defId);
+      game.buy("p0", 0);
+    }
+    game.skipPhase();
+    expect(game.phase).toBe("combat");
+    const onBoard = [...p.board.values()].map((u) => u.defId).sort();
+    // Niveau 2 : les deux unités les plus chères (Zeus, puis Medusa ou Valkyrie) sont placées.
+    expect(onBoard).toHaveLength(2);
+    expect(onBoard).toContain("zeus");
+    expect(owned(p)).toHaveLength(3);
+    expect(p.board.has("3,0")).toBe(true); // Zeus (distance) au centre de la rangée arrière
+  });
+
+  it("leaves a full board untouched", () => {
+    const game = newGame(2, 12);
+    toPlanning(game);
+    const p = player(game);
+    p.gold = 100;
+    p.bench.fill(null);
+    p.board.clear();
+    p.level = 1;
+    stockShop(game, p, 0, "medusa");
+    game.buy("p0", 0);
+    game.move("p0", { zone: "bench", index: p.bench.findIndex((u) => u !== null) }, { zone: "board", col: 0, row: 1 });
+    stockShop(game, p, 0, "zeus");
+    game.buy("p0", 0);
+    game.skipPhase();
+    expect([...p.board.keys()]).toEqual(["0,1"]);
+    expect(p.bench.some((u) => u?.defId === "zeus")).toBe(true);
+  });
+});
+
 describe("rounds", () => {
   it("lets the lowest-health player pick first in the armory", () => {
     const game = newGame(3, 4);

@@ -471,6 +471,8 @@ export class Game {
   // ---------------------------------------------------------------- combat
 
   private startCombat(): void {
+    // Comme dans TFT : les places libres du plateau sont complétées avec le banc.
+    for (const p of this.alivePlayers()) this.autoFillBoard(p);
     this.phase = "combat";
     this.pending = [];
     const kind = roundKind(this.stage, this.round);
@@ -515,6 +517,29 @@ export class Game {
       }
     }
     this.deadline = this.time + longest + TIMERS.combatBufferMs;
+  }
+
+  /**
+   * Place les meilleures unités du banc tant que le plateau compte moins d'unités que le
+   * niveau : corps à corps devant (rangée 3), distance derrière (rangée 0), du centre vers
+   * les bords, puis n'importe quelle case libre.
+   */
+  private autoFillBoard(p: PlayerState): void {
+    const value = (u: OwnedUnit) => this.content.units.get(u.defId)!.cost * u.star ** 2 + u.items.length * 2;
+    const frontCols = [3, 2, 4, 1, 5, 0, 6];
+    const backCols = [3, 2, 4, 1, 5, 0, 6];
+    while (p.board.size < p.level) {
+      const index = p.bench.reduce<number>((best, u, i) => (u && (best < 0 || value(u) > value(p.bench[best]!)) ? i : best), -1);
+      if (index < 0) return;
+      const unit = p.bench[index]!;
+      const melee = this.content.units.get(unit.defId)!.stats.range <= 1;
+      const preferred = melee ? frontCols.map((col) => ({ col, row: 3 })) : backCols.map((col) => ({ col, row: 0 }));
+      const fallback = [2, 1, 0, 3].flatMap((row) => frontCols.map((col) => ({ col, row })));
+      const hex = [...preferred, ...fallback].find(({ col, row }) => !p.board.has(`${col},${row}`));
+      if (!hex) return;
+      p.bench[index] = null;
+      p.board.set(`${hex.col},${hex.row}`, unit);
+    }
   }
 
   /** Paires d'adversaires, en évitant de rejouer contre ses derniers adversaires. */
