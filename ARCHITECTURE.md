@@ -10,7 +10,7 @@ n'est qu'un « skin » qu'on peut changer sans toucher au moteur.
 packages/
   sim/      Simulation pure (TypeScript, zéro dépendance)    ← fait
   server/   Serveur de jeu Colyseus (salons, boutique, rounds) ← fait
-  client/   Rendu Three.js (WebGPU) + interface React         ← à venir
+  client/   Rendu Three.js (WebGPU) + interface React         ← fait (formes simples)
 ```
 
 ```
@@ -173,12 +173,27 @@ Sans choix à la fin de la préparation, un augment est pris au hasard.
   bots qui prennent leurs augments au hasard et donne la place moyenne de chaque augment
   (4,5 = neutre ; cible entre 4,1 et 4,9 dans sa rareté).
 
-## `packages/client` (après)
+## `packages/client`
 
-- **Vite + Three.js** (moteur WebGPU avec repli WebGL), **React** pour l'interface.
-- Modèles 3D en **glTF/GLB** compressés (Draco/Meshopt + textures KTX2), animations
-  `idle / walk / attack / cast / death`.
-- Un « lecteur » qui rejoue le journal d'événements de `sim` avec interpolation.
+Vite + React + Three.js (`WebGPURenderer` de `three/webgpu`, repli WebGL2 automatique ;
+`?webgl` dans l'adresse force WebGL2). Se connecte au salon `game` avec `@colyseus/sdk`
+(`ws://<hôte>:2567`, ou `VITE_SERVER_URL`). Les données (unités, synergies, objets,
+présages, augments) sont importées directement de `sim` et de `server/src/game` (modules purs).
+
+| Fichier | Rôle |
+|---|---|
+| `net/store.ts` | Connexion, copie JSON de l'état à chaque patch, messages `battle` / `error` / `gameOver`, actions, retour en partie après rechargement |
+| `scene/BoardScene.ts` | Scène 3D : plateau hexagonal, banc, unités, glisser-déposer, étiquettes HTML (étoiles, PV, mana, objets), effets |
+| `scene/replay.ts` | Lecteur du journal d'événements d'un combat (déplacements interpolés, sauts en arc, dégâts, soins, boucliers, étourdissements, morts) |
+| `scene/layout.ts` | Coordonnées « odd-r » → monde ; rangée 0 près de la caméra (le joueur est toujours en bas) |
+| `scene/unitMesh.ts` | Unités en formes simples : couleur du panthéon, emblème de la classe, taille selon le coût |
+| `ui/` | Accueil, salon, vote du présage, armurerie, augments, HUD (boutique, synergies, joueurs, objets), fin de partie |
+
+- **Replay** : si le joueur est l'équipe 1 du journal (`side = 1`), toutes les cases sont
+  passées par `mirrorHex` pour qu'il reste en bas.
+- **Raccourcis** : `D` actualiser, `F` acheter de l'XP, `E` vendre l'unité survolée ;
+  glisser une unité sur la boutique la vend ; cliquer sur un joueur observe son plateau.
+- À venir : modèles glTF/GLB animés (`idle / walk / attack / cast / death`), sons.
 
 ## Contenu : toutes les mythologies
 
