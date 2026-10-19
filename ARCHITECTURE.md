@@ -8,9 +8,9 @@ n'est qu'un « skin » qu'on peut changer sans toucher au moteur.
 
 ```
 packages/
-  sim/      Simulation pure (TypeScript, zéro dépendance)   ← fait
-  server/   Serveur de jeu Colyseus (salons, boutique, rounds) ← à venir
-  client/   Rendu Three.js (WebGPU) + interface React        ← à venir
+  sim/      Simulation pure (TypeScript, zéro dépendance)    ← fait
+  server/   Serveur de jeu Colyseus (salons, boutique, rounds) ← fait
+  client/   Rendu Three.js (WebGPU) + interface React         ← à venir
 ```
 
 ```
@@ -82,12 +82,68 @@ rangées 4–7.
 - Les **assassins** sautent à côté de l'ennemi le plus éloigné au début du combat, comme
   dans TFT : le placement de la ligne arrière compte.
 
-## `packages/server` (prochaine étape)
+## `packages/server`
 
-- **Colyseus** : un salon = une partie de 8 joueurs, état synchronisé automatiquement.
-- Phases : `shop` (30 s) → `combat` (appel à `sim`) → résultats (PV perdus).
-- Économie : or, intérêts, séries, XP/niveau, pool partagé d'unités, fusion 3 → ★2.
-- Appariement des adversaires à chaque round, rounds PvE.
+Deux couches bien séparées :
+
+| Fichier | Rôle |
+|---|---|
+| `game/game.ts` | **Toute la logique d'une partie**, sans réseau : boutique, pool partagé, or, niveaux, fusions ★, objets, armurerie, appariement, combats, éliminations |
+| `game/rules.ts` | Économie et calendrier (XP par niveau, revenus, intérêts, séries, dégâts par étape, minuteurs) |
+| `game/omens.ts` | Les **Présages** (voir plus bas) |
+| `game/bot.ts` | Bots (reroll / montée rapide / équilibré) : remplacent un joueur absent ou déconnecté |
+| `room/GameRoom.ts` | Salon Colyseus : reçoit les messages, appelle `Game`, recopie l'état |
+| `room/schema.ts` | État synchronisé vers les clients (binaire, différences seulement) |
+| `scripts/simulate.ts` | Parties complètes entre 8 bots : `npm run simulate -w @autochess/server -- 100` |
+
+### Déroulé d'une partie
+
+```
+Lobby ─▶ Présage (vote, 20 s) ─▶ Étape 1 : armurerie, PvE, PvE, PvE
+                                 Étape 2+ : PvP, PvP, PvP, armurerie, PvP, PvP, PvE
+Chaque round PvP/PvE : préparation (30 s) ─▶ combat (durée du combat + 3 s) ─▶ résultats
+```
+
+- **Lobby** : le premier joueur est l'hôte et lance la partie ; les places vides sont
+  prises par des bots (démarrage automatique au bout de 60 s).
+- **Préparation** : revenu (base + intérêts jusqu'à 5 + série), +2 XP, nouvelle boutique
+  (sauf si verrouillée).
+- **Combat** : tous les combats sont calculés d'un coup par `sim` ; chaque joueur reçoit
+  le journal d'événements de **son** combat (message `battle`) pour le rejouer en 3D.
+  Nombre impair de joueurs : le dernier affronte une **copie** d'un autre joueur.
+- **Dégâts** : base de l'étape + 1 par étoile des unités adverses survivantes.
+- **Déconnexion** : un bot joue à la place du joueur jusqu'à son retour (60 s pour revenir
+  dans la même partie).
+
+### Messages client → serveur
+
+`start`, `vote {omen}`, `pick {offer}`, `buy {slot}`, `sell {at}`, `reroll`, `buyXp`,
+`lock`, `move {from, to}`, `arrange {layout}`, `equip {item, at}` — où une position vaut
+`{ zone: "bench", index }` ou `{ zone: "board", col, row }`. En cas de refus, le serveur
+répond `error {action, error}`.
+
+### Présages : chaque partie est différente
+
+Comme les rencontres et les portails de TFT. Au début de la partie, 3 présages sont
+proposés, chacun annoncé par une figure du roster ; les joueurs votent, et le résultat
+est tiré au sort **pondéré par les votes**. Le présage change les règles pour tous :
+
+| Présage | Héraut | Effet |
+|---|---|---|
+| Hermes' Bargain | Hades | Premier reroll gratuit à chaque round |
+| Hoard of the Nibelungs | Fenrir | +1 or par round |
+| Odin's Wisdom | Valkyrie | L'XP coûte 3 au lieu de 4 |
+| Treasury of Babylon | Gilgamesh | Intérêts plafonnés à 7 au lieu de 5 |
+| Forge of Hephaestus | Cyclops | Un objet complet pour tous au début de l'étape 2 |
+| Bounty of Isis | Isis | Un composant de plus à chaque round PvE |
+| Armory of the Gods | Athena | Objets complets à l'armurerie dès l'étape 3 |
+| Thor's Storm | Thor | +15 % de vitesse d'attaque pour toutes les unités |
+| Zenith of Ra | Ra | +20 puissance et +10 mana de départ pour toutes les unités |
+| Favor of the Pantheon | Zeus | Un panthéon tiré au sort : +200 PV et +15 puissance |
+| Thread of the Fates | Morrigan | Les 5 pièces apparaissent dès le niveau 6 |
+| Ragnarök | Orochi | +50 % de dégâts aux joueurs dès l'étape 4 |
+
+Ajouter un présage = ajouter une entrée dans `omens.ts`.
 
 ## `packages/client` (après)
 
@@ -134,17 +190,25 @@ plutôt que sur la chance.
    - compos mono-synergie et compos mixtes : même taux de victoire.
 4. On corrige d'abord le gabarit si tout un rôle est décalé, puis les sorts un par un.
 
-État au 19 oct. 2026 : archétypes entre 43 et 56 %, 51 unités sur 56 dans la cible,
-compos de 2 à 7 synergies actives toutes entre 49 et 54 %.
+État au 19 oct. 2026 (tournoi de 1 500 équipes, `TEAMS=300 GAMES=30 npm run comps`) :
+archétypes entre 43 et 57 %, 55 unités sur 56 dans la cible (Ra à 59 %), tous les paliers
+de synergie dans la cible sauf Oracle 6 (64 %, peu joué), compos de 3 à 7 synergies
+actives entre 46 et 54 %.
 
-## Équité : limiter la frustration liée à la chance (à faire côté serveur)
+## Équité : limiter la frustration liée à la chance
 
-- **Objets normalisés** : chaque joueur reçoit la même valeur totale de composants à
-  chaque étape ; seule la forme varie (composants, or, unités), pas la quantité.
-- **Carrousel** : tous les joueurs choisissent dans le même ensemble, le plus bas en PV
-  choisit en premier.
-- **Pool partagé visible** : on voit qui joue quoi, donc on peut éviter une compo
-  contestée au lieu de la subir.
-- **Protection contre la malchance** : après plusieurs rerolls sans voir une unité
-  encore disponible dans le pool, sa probabilité augmente légèrement.
+En place dans le serveur :
+
+- **Butin PvE normalisé** : chaque joueur reçoit le même nombre de composants à chaque
+  round PvE, qu'il gagne ou non ; seul le type varie.
+- **Armurerie équitable** (l'équivalent du carrousel) : un choix par joueur, le plus bas
+  en PV choisit en premier.
+- **Pool partagé** : acheter une unité la retire du pool de tout le monde ; on voit les
+  plateaux des autres, donc on peut éviter une compo contestée.
+- **Protection contre la malchance** : une unité qu'on possède et qu'on n'a pas vue depuis
+  plusieurs boutiques gagne jusqu'à ×2 de chances d'apparaître (+15 % par boutique ratée).
+- **Appariement** : on évite de rejouer contre ses derniers adversaires.
 - **Pas de personnage piège** : `npm run comps` avant chaque modification du contenu.
+
+À faire : boutique toujours privée côté rendu (déjà privée côté réseau), et plus de
+recettes d'objets (6 objets complets sur les 36 combinaisons possibles pour l'instant).

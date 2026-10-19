@@ -17,8 +17,8 @@ import {
   type UnitDef,
 } from "../src/index.js";
 
-const TEAMS_PER_ARCHETYPE = 120;
-const GAMES_PER_TEAM = 24;
+const TEAMS_PER_ARCHETYPE = Number(process.env.TEAMS ?? 120);
+const GAMES_PER_TEAM = Number(process.env.GAMES ?? 24);
 const UNIT_LOW = 0.42;
 const UNIT_HIGH = 0.58;
 const content = createContent();

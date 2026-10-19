@@ -10,6 +10,7 @@ import type {
   BattleResult,
   DamageType,
   EffectDef,
+  Modifier,
   Scaling,
   StarLevel,
   StarValues,
@@ -176,6 +177,12 @@ class Battle {
         for (const unit of recipients) {
           if (breakpoint.stats) addStats(unit.stats, breakpoint.stats);
           unit.triggers.push(...(breakpoint.triggers ?? []));
+        }
+      }
+      for (const modifier of this.input.modifiers?.[team] ?? []) {
+        for (const unit of members.filter((u) => matchesFilter(u.def, modifier.filter))) {
+          if (modifier.stats) addStats(unit.stats, modifier.stats);
+          unit.triggers.push(...(modifier.triggers ?? []));
         }
       }
       this.emit({
@@ -525,6 +532,14 @@ class Battle {
 }
 
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
+
+function matchesFilter(def: UnitDef, filter: Modifier["filter"]): boolean {
+  if (!filter) return true;
+  return (
+    (filter.traits?.some((t) => def.traits.includes(t)) ?? false) ||
+    (filter.costs?.includes(def.cost) ?? false)
+  );
+}
 
 function starValue(values: StarValues, star: StarLevel): number {
   return values[star - 1]!;

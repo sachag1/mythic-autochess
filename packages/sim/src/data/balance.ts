@@ -28,9 +28,9 @@ const ROLE_TEMPLATES: Record<Role, Pick<Stats, "maxHp" | "attackDamage" | "armor
 };
 
 /** Multiplicateurs par coût (index 0 = 1 pièce). */
-const HP_BY_COST = [1, 1.2, 1.32, 1.44, 1.6] as const;
+const HP_BY_COST = [1, 1.2, 1.32, 1.48, 1.6] as const;
 const AD_BY_COST = [1, 1.16, 1.26, 1.37, 1.5] as const;
-const ABILITY_BY_COST = [1, 1.4, 1.6, 1.8, 2.2] as const;
+const ABILITY_BY_COST = [1, 1.4, 1.6, 1.85, 2.2] as const;
 const ABILITY_BY_STAR = [1, 1.5, 2.1] as const;
 
 export function roleStats(role: Role, cost: Cost, tweak: Partial<Stats> = {}): Stats {

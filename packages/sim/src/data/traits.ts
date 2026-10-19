@@ -65,8 +65,8 @@ export const TRAITS: readonly TraitDef[] = [
     description: "Every 4 seconds, each Sun Court member heals the most wounded ally.",
     breakpoints: [
       { count: 2, scope: "members", triggers: [{ on: "interval", everyMs: 4000, target: "lowestHpAlly", effects: [{ kind: "heal", amount: flat(80), scaling: "ap", area: { shape: "single" } }] }] },
-      { count: 4, scope: "members", triggers: [{ on: "interval", everyMs: 4000, target: "lowestHpAlly", effects: [{ kind: "heal", amount: flat(150), scaling: "ap", area: { shape: "single" } }] }] },
-      { count: 6, scope: "members", triggers: [{ on: "interval", everyMs: 4000, target: "lowestHpAlly", effects: [{ kind: "heal", amount: flat(200), scaling: "ap", area: { shape: "single" } }] }] },
+      { count: 4, scope: "members", triggers: [{ on: "interval", everyMs: 4000, target: "lowestHpAlly", effects: [{ kind: "heal", amount: flat(170), scaling: "ap", area: { shape: "single" } }] }] },
+      { count: 6, scope: "members", triggers: [{ on: "interval", everyMs: 4000, target: "lowestHpAlly", effects: [{ kind: "heal", amount: flat(280), scaling: "ap", area: { shape: "single" } }] }] },
     ],
   },
   {
@@ -87,7 +87,7 @@ export const TRAITS: readonly TraitDef[] = [
     description: "The whole team gains omnivamp.",
     breakpoints: [
       { count: 2, scope: "team", stats: { omnivamp: 8 } },
-      { count: 4, scope: "team", stats: { omnivamp: 18 } },
+      { count: 4, scope: "team", stats: { omnivamp: 22 } },
       { count: 6, scope: "team", stats: { omnivamp: 30 } },
     ],
   },
@@ -121,7 +121,7 @@ export const TRAITS: readonly TraitDef[] = [
     breakpoints: [
       { count: 2, scope: "members", stats: { armor: 25, magicResist: 25 } },
       { count: 4, scope: "members", stats: { armor: 38, magicResist: 38 } },
-      { count: 6, scope: "members", stats: { armor: 110, magicResist: 110 } },
+      { count: 6, scope: "members", stats: { armor: 65, magicResist: 65 } },
     ],
   },
 
@@ -134,7 +134,7 @@ export const TRAITS: readonly TraitDef[] = [
     breakpoints: [
       { count: 2, scope: "members", stats: { durability: 6 } },
       { count: 4, scope: "members", stats: { durability: 12 } },
-      { count: 6, scope: "team", stats: { durability: 20 } },
+      { count: 6, scope: "team", stats: { durability: 15 } },
     ],
   },
   {
@@ -177,7 +177,7 @@ export const TRAITS: readonly TraitDef[] = [
     description: "Sorcerers gain ability power.",
     breakpoints: [
       { count: 2, scope: "members", stats: { abilityPower: 25 } },
-      { count: 4, scope: "members", stats: { abilityPower: 50 } },
+      { count: 4, scope: "members", stats: { abilityPower: 42 } },
       { count: 6, scope: "members", stats: { abilityPower: 110 } },
     ],
   },
@@ -188,7 +188,7 @@ export const TRAITS: readonly TraitDef[] = [
     description: "Tricksters gain critical strike chance and critical damage.",
     breakpoints: [
       { count: 2, scope: "members", stats: { critChance: 0.2, critDamage: 0.2 } },
-      { count: 4, scope: "members", stats: { critChance: 0.5, critDamage: 0.6 } },
+      { count: 4, scope: "members", stats: { critChance: 0.55, critDamage: 0.7 } },
       { count: 6, scope: "members", stats: { critChance: 0.7, critDamage: 1 } },
     ],
   },
@@ -200,7 +200,7 @@ export const TRAITS: readonly TraitDef[] = [
     breakpoints: [
       { count: 2, scope: "members", triggers: [{ on: "interval", everyMs: 5000, target: "lowestHpAlly", effects: [{ kind: "shield", amount: flat(70), scaling: "ap", durationMs: 4000, area: { shape: "single" } }] }] },
       { count: 4, scope: "members", triggers: [{ on: "interval", everyMs: 5000, target: "lowestHpAlly", effects: [{ kind: "shield", amount: flat(130), scaling: "ap", durationMs: 4000, area: { shape: "single" } }] }] },
-      { count: 6, scope: "members", triggers: [{ on: "interval", everyMs: 5000, target: "lowestHpAlly", effects: [{ kind: "shield", amount: flat(550), scaling: "ap", durationMs: 4000, area: { shape: "single" } }] }] },
+      { count: 6, scope: "members", triggers: [{ on: "interval", everyMs: 5000, target: "lowestHpAlly", effects: [{ kind: "shield", amount: flat(320), scaling: "ap", durationMs: 4000, area: { shape: "single" } }] }] },
     ],
   },
 ];

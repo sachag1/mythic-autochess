@@ -156,10 +156,20 @@ export interface Content {
   items: ReadonlyMap<string, ItemDef>;
 }
 
+/** Bonus appliqué à une équipe entière ou à une partie de ses unités (présages, augments…). */
+export interface Modifier {
+  /** Unités concernées ; toutes si absent. Une unité est concernée si elle a l'une des
+   * synergies OU l'un des coûts listés. */
+  filter?: { traits?: readonly string[]; costs?: readonly number[] };
+  stats?: StatBonus;
+  triggers?: readonly TriggerDef[];
+}
+
 export interface BattleInput {
   seed: number;
   boards: readonly [readonly Placement[], readonly Placement[]];
   content: Content;
+  modifiers?: readonly [readonly Modifier[], readonly Modifier[]];
 }
 
 /** Temps `t` en millisecondes depuis le début du combat. */

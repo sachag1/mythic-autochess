@@ -6,6 +6,7 @@ import {
   ITEMS,
   mirrorHex,
   neighbors,
+  PVE_WAVES,
   runBattle,
   TRAITS,
   UNITS,
@@ -126,6 +127,29 @@ describe("battle", () => {
     });
     const spawn = withBelt.events.find((e) => e.type === "spawn" && e.unit === 0);
     expect(spawn).toMatchObject({ maxHp: content.units.get("valkyrie")!.stats.maxHp + 150 });
+  });
+
+  it("applies team modifiers only to matching units", () => {
+    const result = runBattle({
+      seed: 0,
+      boards: [frontline, backline],
+      content,
+      modifiers: [[{ filter: { traits: ["greek"] }, stats: { maxHp: 100 } }], []],
+    });
+    const spawns = result.events.filter((e) => e.type === "spawn" && e.team === 0);
+    for (const spawn of spawns) {
+      if (spawn.type !== "spawn") continue;
+      const def = content.units.get(spawn.defId)!;
+      const expected = def.stats.maxHp + (def.traits.includes("greek") ? 100 : 0);
+      expect(spawn.maxHp, def.id).toBe(expected);
+    }
+  });
+
+  it("can fight every PvE wave", () => {
+    for (const wave of Object.values(PVE_WAVES)) {
+      const result = runBattle({ seed: 0, boards: [frontline, wave], content });
+      expect(result.events.at(-1)?.type).toBe("end");
+    }
   });
 
   it("rejects invalid boards", () => {

@@ -103,7 +103,7 @@ export const UNITS: readonly UnitDef[] = [
     target: "currentTarget",
     castTimeMs: 400,
     effects: [
-      { kind: "damage", damageType: "physical", amount: adRatio(2.6), scaling: "ad", area: { shape: "single" } },
+      { kind: "damage", damageType: "physical", amount: adRatio(2.9), scaling: "ad", area: { shape: "single" } },
       { kind: "buff", stat: "attackSpeedPct", amount: [20, 25, 35], durationMs: 4000, area: { shape: "self" } },
     ],
   }),
@@ -277,7 +277,7 @@ export const UNITS: readonly UnitDef[] = [
     target: "highestHpEnemy",
     castTimeMs: 600,
     effects: [
-      { kind: "damage", damageType: "magic", amount: abilityValues(3, 150), scaling: "ap", area: { shape: "radius", radius: 1 } },
+      { kind: "damage", damageType: "magic", amount: abilityValues(3, 135), scaling: "ap", area: { shape: "radius", radius: 1 } },
       { kind: "stun", durationMs: durationValues(750), area: { shape: "single" } },
     ],
   }),
@@ -286,7 +286,7 @@ export const UNITS: readonly UnitDef[] = [
     description: "Shoots the farthest enemy with a piercing arrow.",
     target: "farthestEnemy",
     castTimeMs: 500,
-    effects: [{ kind: "damage", damageType: "physical", amount: adRatio(3.4), scaling: "ad", area: { shape: "single" } }],
+    effects: [{ kind: "damage", damageType: "physical", amount: adRatio(4), scaling: "ad", area: { shape: "single" } }],
   }),
   unit("morrigan", "Morrigan", 3, ["celtic", "sorcerer"], "mage", {
     name: "Crow Swarm",
@@ -321,7 +321,7 @@ export const UNITS: readonly UnitDef[] = [
     description: "Sends her falcon cloak crashing into her target and those around it.",
     target: "currentTarget",
     castTimeMs: 500,
-    effects: [{ kind: "damage", damageType: "physical", amount: adRatio(2.7), scaling: "ad", area: { shape: "radius", radius: 1 } }],
+    effects: [{ kind: "damage", damageType: "physical", amount: adRatio(2.5), scaling: "ad", area: { shape: "radius", radius: 1 } }],
   }),
   unit("isis", "Isis", 3, ["egyptian", "oracle"], "support", {
     name: "Breath of Life",
@@ -426,7 +426,7 @@ export const UNITS: readonly UnitDef[] = [
     target: "currentTarget",
     castTimeMs: 600,
     effects: [
-      { kind: "damage", damageType: "magic", amount: abilityValues(4, 120), scaling: "ap", area: { shape: "radius", radius: 1 } },
+      { kind: "damage", damageType: "magic", amount: abilityValues(4, 112), scaling: "ap", area: { shape: "radius", radius: 1 } },
       { kind: "stun", durationMs: durationValues(1250), area: { shape: "single" } },
     ],
   }),
@@ -436,8 +436,8 @@ export const UNITS: readonly UnitDef[] = [
     target: "currentTarget",
     castTimeMs: 500,
     effects: [
-      { kind: "damage", damageType: "physical", amount: adRatio(2.2), scaling: "ad", area: { shape: "radius", radius: 1 } },
-      { kind: "buff", stat: "damageAmp", amount: [8, 10, 15], area: { shape: "self" } },
+      { kind: "damage", damageType: "physical", amount: adRatio(2.6), scaling: "ad", area: { shape: "radius", radius: 1 } },
+      { kind: "buff", stat: "damageAmp", amount: [10, 12, 18], area: { shape: "self" } },
     ],
   }),
   unit("cernunnos", "Cernunnos", 4, ["celtic", "oracle"], "support", {
@@ -486,7 +486,7 @@ export const UNITS: readonly UnitDef[] = [
     target: "self",
     castTimeMs: 800,
     effects: [
-      { kind: "damage", damageType: "magic", amount: abilityValues(5, 80), scaling: "ap", area: { shape: "all" } },
+      { kind: "damage", damageType: "magic", amount: abilityValues(5, 66), scaling: "ap", area: { shape: "all" } },
       { kind: "heal", amount: abilityValues(5, 60), scaling: "ap", area: { shape: "all" } },
     ],
   }),
