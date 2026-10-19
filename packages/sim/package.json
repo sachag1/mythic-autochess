@@ -1,0 +1,15 @@
+{
+  "name": "@autochess/sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "demo": "tsx scripts/demo.ts",
+    "balance": "tsx scripts/balance.ts",
+    "comps": "tsx scripts/comps.ts"
+  }
+}
