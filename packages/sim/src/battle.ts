@@ -11,6 +11,7 @@ import type {
   DamageType,
   EffectDef,
   Modifier,
+  ResistKey,
   Scaling,
   StarLevel,
   StarValues,
@@ -33,6 +34,11 @@ const MANA_FROM_RAW = 0.01;
 const MANA_FROM_TAKEN = 0.07;
 const MANA_FROM_DAMAGE_CAP = 42.5;
 const MAX_DURABILITY = 80;
+/** Les brûlures infligent leurs dégâts toutes les secondes. */
+export const BURN_TICK_MS = 1000;
+
+/** Effets qui touchent toujours les ennemis de celui qui les lance. */
+const HOSTILE_EFFECTS: ReadonlySet<EffectDef["kind"]> = new Set(["damage", "stun", "burn", "wound", "sunder"]);
 
 interface TimedBuff {
   stat: StatKey;
@@ -45,9 +51,30 @@ interface Shield {
   expiresAt: number;
 }
 
+/** Un déclencheur porté par une unité, avec son compteur et son temps de recharge. */
+interface ActiveTrigger {
+  def: TriggerDef;
+  uses: number;
+  readyAt: number;
+}
+
 interface IntervalTrigger {
-  trigger: Extract<TriggerDef, { on: "interval" }>;
+  trigger: ActiveTrigger;
+  everyMs: number;
   nextAt: number;
+}
+
+interface Burn {
+  sourceId: number;
+  percent: number;
+  expiresAt: number;
+  nextTickAt: number;
+}
+
+/** Malus temporaire en % (blessure, réduction de résistance) : seul le plus fort compte. */
+interface Debuff {
+  percent: number;
+  expiresAt: number;
 }
 
 interface Unit {
@@ -68,8 +95,13 @@ interface Unit {
   busyUntil: number;
   stunnedUntil: number;
   attackCount: number;
-  triggers: TriggerDef[];
+  triggers: ActiveTrigger[];
   intervals: IntervalTrigger[];
+  burn: Burn | null;
+  wounds: Debuff[];
+  sunders: Record<ResistKey, Debuff[]>;
+  /** Immunité aux étourdissements jusqu'à cet instant. */
+  immuneUntil: number;
 }
 
 export function runBattle(input: BattleInput): BattleResult {
@@ -88,7 +120,16 @@ class Battle {
   }
 
   run(): BattleResult {
-    for (const unit of this.units) this.fireTriggers(unit, "combatStart");
+    // Les immunités passent en premier : un étourdissement de début de combat ne doit pas
+    // dépendre de l'ordre des unités.
+    for (const immunityFirst of [true, false]) {
+      for (const unit of this.units) {
+        for (const trigger of unit.triggers) {
+          const grantsImmunity = trigger.def.effects.some((e) => e.kind === "immunity");
+          if (trigger.def.on === "combatStart" && grantsImmunity === immunityFirst) this.runTrigger(unit, trigger);
+        }
+      }
+    }
 
     while (true) {
       for (const unit of this.units) {
@@ -156,13 +197,17 @@ class Battle {
           attackCount: 0,
           triggers: [],
           intervals: [],
+          burn: null,
+          wounds: [],
+          sunders: { armor: [], magicResist: [] },
+          immuneUntil: 0,
         };
-        unit.triggers.push(...(def.passives ?? []));
+        addTriggers(unit, def.passives);
         for (const itemId of placement.items ?? []) {
           const item = content.items.get(itemId);
           if (!item) throw new Error(`Unknown item "${itemId}"`);
           addStats(unit.stats, item.stats);
-          unit.triggers.push(...(item.triggers ?? []));
+          addTriggers(unit, item.triggers);
         }
         this.units.push(unit);
       }
@@ -176,13 +221,13 @@ class Battle {
           breakpoint.scope === "team" ? members : members.filter((u) => u.def.traits.includes(trait.id));
         for (const unit of recipients) {
           if (breakpoint.stats) addStats(unit.stats, breakpoint.stats);
-          unit.triggers.push(...(breakpoint.triggers ?? []));
+          addTriggers(unit, breakpoint.triggers);
         }
       }
       for (const modifier of this.input.modifiers?.[team] ?? []) {
         for (const unit of members.filter((u) => matchesFilter(u.def, modifier.filter))) {
           if (modifier.stats) addStats(unit.stats, modifier.stats);
-          unit.triggers.push(...(modifier.triggers ?? []));
+          addTriggers(unit, modifier.triggers);
         }
       }
       this.emit({
@@ -196,7 +241,8 @@ class Battle {
       unit.hp = unit.stats.maxHp;
       unit.mana = Math.min(unit.stats.startMana, unit.stats.maxMana);
       for (const trigger of unit.triggers) {
-        if (trigger.on === "interval") unit.intervals.push({ trigger, nextAt: trigger.everyMs });
+        const def = trigger.def;
+        if (def.on === "interval") unit.intervals.push({ trigger, everyMs: def.everyMs, nextAt: def.everyMs });
       }
       this.emit({
         type: "spawn",
@@ -215,9 +261,11 @@ class Battle {
   // ---------------------------------------------------------------- tour d'une unité
 
   private step(unit: Unit): void {
+    this.tickBurn(unit);
+    if (!unit.alive) return;
     for (const interval of unit.intervals) {
       if (this.t >= interval.nextAt) {
-        interval.nextAt += interval.trigger.everyMs;
+        interval.nextAt += interval.everyMs;
         this.runTrigger(unit, interval.trigger);
         if (!unit.alive) return;
       }
@@ -296,8 +344,9 @@ class Battle {
     this.dealDamage(unit, target, damage, "physical");
 
     for (const trigger of unit.triggers) {
-      if (trigger.on === "everyNAttacks" && unit.attackCount % trigger.n === 0) this.runTrigger(unit, trigger);
+      if (trigger.def.on === "everyNAttacks" && unit.attackCount % trigger.def.n === 0) this.runTrigger(unit, trigger);
     }
+    if (crit) this.fireTriggers(unit, "onCrit");
   }
 
   private cast(unit: Unit): void {
@@ -315,14 +364,31 @@ class Battle {
 
   private fireTriggers(unit: Unit, on: TriggerDef["on"]): void {
     for (const trigger of unit.triggers) {
-      if (trigger.on === on) this.runTrigger(unit, trigger);
+      if (trigger.def.on === on) this.runTrigger(unit, trigger);
     }
   }
 
-  private runTrigger(unit: Unit, trigger: TriggerDef): void {
+  private runTrigger(unit: Unit, trigger: ActiveTrigger): void {
     if (!unit.alive) return;
-    const center = this.resolveTarget(unit, trigger.target);
-    if (center) this.applyEffects(unit, trigger.effects, center);
+    const limit = trigger.def.limit ?? (trigger.def.on === "hpBelow" ? 1 : Infinity);
+    if (trigger.uses >= limit) return;
+    trigger.uses++;
+    const center = this.resolveTarget(unit, trigger.def.target);
+    if (center) this.applyEffects(unit, trigger.def.effects, center);
+  }
+
+  /** Déclencheurs liés aux dégâts reçus : "onDamageTaken" (avec recharge) et "hpBelow". */
+  private onDamaged(unit: Unit): void {
+    for (const trigger of unit.triggers) {
+      if (!unit.alive) return;
+      const def = trigger.def;
+      if (def.on === "onDamageTaken" && this.t >= trigger.readyAt) {
+        trigger.readyAt = this.t + def.cooldownMs;
+        this.runTrigger(unit, trigger);
+      } else if (def.on === "hpBelow" && trigger.uses === 0 && unit.hp < (this.stat(unit, "maxHp") * def.percent) / 100) {
+        this.runTrigger(unit, trigger);
+      }
+    }
   }
 
   private resolveTarget(unit: Unit, rule: TargetRule): Unit | null {
@@ -346,7 +412,11 @@ class Battle {
         this.leap(source, center);
         continue;
       }
-      const affects: Affects = effect.kind === "damage" || effect.kind === "stun" ? "enemies" : (effect.affects ?? "allies");
+      const affects: Affects = HOSTILE_EFFECTS.has(effect.kind)
+        ? "enemies"
+        : "affects" in effect && effect.affects
+          ? effect.affects
+          : "allies";
       for (const target of this.areaRecipients(source, center, effect.area, affects)) {
         this.applyEffect(source, effect, target);
       }
@@ -402,6 +472,7 @@ class Battle {
         return;
       }
       case "stun": {
+        if (this.t < target.immuneUntil) return;
         const durationMs = starValue(effect.durationMs, source.star);
         target.stunnedUntil = Math.max(target.stunnedUntil, this.t + durationMs);
         this.emit({ type: "stun", source: source.id, target: target.id, durationMs });
@@ -409,6 +480,37 @@ class Battle {
       }
       case "mana":
         this.gainMana(target, starValue(effect.amount, source.star));
+        return;
+      case "burn": {
+        const current = target.burn && target.burn.expiresAt > this.t ? target.burn : null;
+        const stronger = !current || effect.percentMaxHp >= current.percent;
+        target.burn = {
+          sourceId: stronger ? source.id : current.sourceId,
+          percent: stronger ? effect.percentMaxHp : current.percent,
+          expiresAt: Math.max(this.t + effect.durationMs, current?.expiresAt ?? 0),
+          nextTickAt: current?.nextTickAt ?? this.t + BURN_TICK_MS,
+        };
+        this.emit({ type: "burn", source: source.id, target: target.id, percentMaxHp: effect.percentMaxHp, durationMs: effect.durationMs });
+        return;
+      }
+      case "wound":
+        target.wounds.push({ percent: effect.percent, expiresAt: this.t + effect.durationMs });
+        this.emit({ type: "wound", source: source.id, target: target.id, percent: effect.percent, durationMs: effect.durationMs });
+        return;
+      case "sunder":
+        target.sunders[effect.stat].push({ percent: effect.percent, expiresAt: this.t + effect.durationMs });
+        this.emit({
+          type: "sunder",
+          source: source.id,
+          target: target.id,
+          stat: effect.stat,
+          percent: effect.percent,
+          durationMs: effect.durationMs,
+        });
+        return;
+      case "immunity":
+        target.immuneUntil = Math.max(target.immuneUntil, this.t + effect.durationMs);
+        this.emit({ type: "immunity", source: source.id, target: target.id, durationMs: effect.durationMs });
         return;
       case "buff": {
         const amount = starValue(effect.amount, source.star);
@@ -431,7 +533,8 @@ class Battle {
     }
   }
 
-  private dealDamage(source: Unit, target: Unit, raw: number, damageType: DamageType): void {
+  /** `overTime` : dégâts d'une brûlure, qui ne donnent ni mana ni vol de vie. */
+  private dealDamage(source: Unit, target: Unit, raw: number, damageType: DamageType, overTime = false): void {
     if (!target.alive || raw <= 0) return;
     const amplified = raw * (1 + this.stat(source, "damageAmp") / 100);
     const mitigation =
@@ -454,7 +557,7 @@ class Battle {
     }
     target.shields = target.shields.filter((s) => s.amount > 0 && s.expiresAt > this.t);
     target.hp -= remaining;
-    this.gainMana(target, Math.min(MANA_FROM_DAMAGE_CAP, raw * MANA_FROM_RAW + taken * MANA_FROM_TAKEN));
+    if (!overTime) this.gainMana(target, Math.min(MANA_FROM_DAMAGE_CAP, raw * MANA_FROM_RAW + taken * MANA_FROM_TAKEN));
 
     this.emit({
       type: "damage",
@@ -468,14 +571,29 @@ class Battle {
     });
 
     const vamp = this.stat(source, "omnivamp");
-    if (vamp > 0 && source.alive) this.heal(source, source, (taken * vamp) / 100);
+    if (vamp > 0 && source.alive && !overTime) this.heal(source, source, (taken * vamp) / 100);
 
     if (target.hp <= 0) this.kill(target, source);
+    else if (taken > 0) this.onDamaged(target);
+  }
+
+  private tickBurn(unit: Unit): void {
+    const burn = unit.burn;
+    if (!burn || this.t < burn.nextTickAt) return;
+    if (burn.nextTickAt > burn.expiresAt) {
+      unit.burn = null;
+      return;
+    }
+    burn.nextTickAt += BURN_TICK_MS;
+    if (burn.nextTickAt > burn.expiresAt) unit.burn = null;
+    const damage = (this.stat(unit, "maxHp") * burn.percent) / 100;
+    this.dealDamage(this.units[burn.sourceId]!, unit, damage, "true", true);
   }
 
   private heal(source: Unit, target: Unit, amount: number): void {
     if (!target.alive) return;
-    const healed = Math.min(amount, this.stat(target, "maxHp") - target.hp);
+    const wound = strongest(target.wounds, this.t);
+    const healed = Math.min(amount * (1 - wound / 100), this.stat(target, "maxHp") - target.hp);
     if (healed <= 0) return;
     target.hp += healed;
     this.emit({ type: "heal", source: source.id, target: target.id, amount: Math.round(healed), hp: Math.round(target.hp) });
@@ -486,6 +604,7 @@ class Battle {
     unit.hp = 0;
     this.emit({ type: "death", unit: unit.id, killer: killer.id });
     for (const ally of this.alliesOf(unit)) this.fireTriggers(ally, "onAllyDeath");
+    if (killer.alive && killer.team !== unit.team) this.fireTriggers(killer, "onKill");
   }
 
   // ---------------------------------------------------------------- utilitaires
@@ -499,6 +618,9 @@ class Battle {
     for (const buff of unit.timedBuffs) {
       if (buff.stat === key && buff.expiresAt > this.t) value += buff.amount;
     }
+    if ((key === "armor" || key === "magicResist") && value > 0) {
+      value *= 1 - strongest(unit.sunders[key], this.t) / 100;
+    }
     return value;
   }
 
@@ -511,6 +633,7 @@ class Battle {
     const base = starValue(values, source.star);
     if (scaling === "ap") return (base * this.stat(source, "abilityPower")) / 100;
     if (scaling === "ad") return base * this.stat(source, "attackDamage");
+    if (scaling === "maxHp") return (base * this.stat(source, "maxHp")) / 100;
     return base;
   }
 
@@ -539,6 +662,17 @@ function matchesFilter(def: UnitDef, filter: Modifier["filter"]): boolean {
     (filter.traits?.some((t) => def.traits.includes(t)) ?? false) ||
     (filter.costs?.includes(def.cost) ?? false)
   );
+}
+
+function addTriggers(unit: Unit, triggers: readonly TriggerDef[] | undefined): void {
+  for (const def of triggers ?? []) unit.triggers.push({ def, uses: 0, readyAt: 0 });
+}
+
+/** Plus fort malus encore actif (0 si aucun). */
+function strongest(debuffs: Debuff[], t: number): number {
+  let best = 0;
+  for (const d of debuffs) if (d.expiresAt > t && d.percent > best) best = d.percent;
+  return best;
 }
 
 function starValue(values: StarValues, star: StarLevel): number {

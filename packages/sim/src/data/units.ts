@@ -465,7 +465,7 @@ export const UNITS: readonly UnitDef[] = [
     effects: [
       { kind: "damage", damageType: "magic", amount: abilityValues(4, 120), scaling: "ap", area: { shape: "radius", radius: 1 } },
       { kind: "stun", durationMs: durationValues(1000), area: { shape: "radius", radius: 1 } },
-      { kind: "shield", amount: abilityValues(4, 160), scaling: "ap", durationMs: 4000, area: { shape: "self" } },
+      { kind: "shield", amount: abilityValues(4, 140), scaling: "ap", durationMs: 4000, area: { shape: "self" } },
     ],
   }),
 
@@ -507,7 +507,7 @@ export const UNITS: readonly UnitDef[] = [
     castTimeMs: 500,
     effects: [
       { kind: "damage", damageType: "physical", amount: adRatio(3.2), scaling: "ad", area: { shape: "radius", radius: 1 } },
-      { kind: "buff", stat: "durability", amount: [35, 35, 50], durationMs: 4000, area: { shape: "self" } },
+      { kind: "buff", stat: "durability", amount: [30, 30, 45], durationMs: 4000, area: { shape: "self" } },
     ],
   }),
   unit("thor", "Thor", 5, ["norse", "warrior"], "bruiser", {

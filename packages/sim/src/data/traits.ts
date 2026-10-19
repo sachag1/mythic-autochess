@@ -77,7 +77,7 @@ export const TRAITS: readonly TraitDef[] = [
     breakpoints: [
       { count: 2, scope: "members", stats: { startMana: 30 } },
       { count: 4, scope: "members", stats: { startMana: 55 }, triggers: [{ on: "everyNAttacks", n: 1, target: "self", effects: [{ kind: "mana", amount: flat(6), area: { shape: "self" } }] }] },
-      { count: 6, scope: "members", stats: { startMana: 90 }, triggers: [{ on: "everyNAttacks", n: 1, target: "self", effects: [{ kind: "mana", amount: flat(12), area: { shape: "self" } }] }] },
+      { count: 6, scope: "members", stats: { startMana: 90 }, triggers: [{ on: "everyNAttacks", n: 1, target: "self", effects: [{ kind: "mana", amount: flat(9), area: { shape: "self" } }] }] },
     ],
   },
   {
@@ -121,7 +121,7 @@ export const TRAITS: readonly TraitDef[] = [
     breakpoints: [
       { count: 2, scope: "members", stats: { armor: 25, magicResist: 25 } },
       { count: 4, scope: "members", stats: { armor: 38, magicResist: 38 } },
-      { count: 6, scope: "members", stats: { armor: 65, magicResist: 65 } },
+      { count: 6, scope: "members", stats: { armor: 58, magicResist: 58 } },
     ],
   },
 
